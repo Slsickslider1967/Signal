@@ -1,0 +1,2 @@
+Add simple anti-click envelope (fade-in/out) when a waveform is enabled/disabled to remove residual clicks.
+Time-stretch (preserve pitch) — change playback speed/duration but keep `Frequency` unchanged

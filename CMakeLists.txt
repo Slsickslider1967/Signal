@@ -4,8 +4,11 @@ project(Signals)
 
 set(CMAKE_CXX_STANDARD 17)
 add_executable(Signals
-    src/WaveFormGenerator.cpp
+    src/Modules/WaveFormGenerator.cpp
     src/Functions/Window.cpp
+    src/Functions/ImGuiUtil.cpp
+    src/Functions/Audio.cpp
+    src/Functions/WaveForm.cpp
 )
 
 target_include_directories(Signals PRIVATE ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/external/imgui)
@@ -27,5 +30,6 @@ target_sources(Signals PRIVATE ${IMGUI_SOURCES})
 # Find and link GLFW and OpenGL
 find_package(OpenGL REQUIRED)
 find_package(glfw3 REQUIRED)
+find_package(SDL2 REQUIRED)
 
-target_link_libraries(Signals PRIVATE glfw OpenGL::GL)
+target_link_libraries(Signals PRIVATE glfw OpenGL::GL SDL2::SDL2)
