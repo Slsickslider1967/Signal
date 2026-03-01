@@ -7,9 +7,14 @@
             "program": "${workspaceFolder}/build/Signals",
             "args": [],
             "stopAtEntry": false,
-            "cwd": "${workspaceFolder}",
-            "environment": [],
-            "externalConsole": false,
+            "cwd": "${workspaceFolder}/build",
+            "environment": [
+                {
+                    "name": "PREFER_X11",
+                    "value": "1"
+                }
+            ],
+            "externalConsole": true,
             "MIMode": "gdb",
             "setupCommands": [
                 {

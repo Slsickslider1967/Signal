@@ -1,2 +1,4 @@
 Add simple anti-click envelope (fade-in/out) when a waveform is enabled/disabled to remove residual clicks.
-Time-stretch (preserve pitch) — change playback speed/duration but keep `Frequency` unchanged
+Time-stretch (preserve pitch) — change playback speed/duration but keep `Frequency` unchanged - Sound Torch
+
+Next steps I can take (pick one): wire these fields into the actual audio/CV mapping pipeline (apply in Audio::SetWaveForms / WaveForm sample generation), add pulse-width / fine controls, or add a V/Oct mode
