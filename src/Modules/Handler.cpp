@@ -65,12 +65,10 @@ static int SelectedModuleID = -1;
 // --Audio Processing Callback--
 void AudioFilterCallback(float* buffer, int numSamples, void* userData)
 {
-    // Process audio through the first enabled rack with an Output module
     for (auto& rack : Racks)
     {
         if (!rack.Enabled) continue;
         
-        // Check if rack has Output module
         bool hasOutput = false;
         for (const auto& module : rack.Modules)
         {
@@ -83,7 +81,6 @@ void AudioFilterCallback(float* buffer, int numSamples, void* userData)
         
         if (!hasOutput) continue;
         
-        // Process through each module in the chain
         std::vector<float> tempBuffer(numSamples);
         float* currentInput = buffer;
         float* currentOutput = tempBuffer.data();
