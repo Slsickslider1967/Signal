@@ -21,6 +21,7 @@ add_executable(Signals
     src/Functions/Audio.cpp
     src/Functions/WaveForm.cpp
     src/Modules/VoltageControllFilter.cpp
+    src/Modules/Voltage-ControlledAmplifier.cpp
 )
 
 target_include_directories(Signals PRIVATE ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/external/imgui)

@@ -120,20 +120,19 @@ namespace VCF
     {
         switch (selectedFilterType)
         {
-            case 0: // FILTER_LP
+            case 0: 
                 ApplyLowPass(inputBuffer, outputBuffer, bufferSize);
                 break;
-            case 1: // FILTER_HP
+            case 1: 
                 ApplyHighPass(inputBuffer, outputBuffer, bufferSize);
                 break;
-            case 2: // FILTER_BP
+            case 2:
                 ApplyBandPass(inputBuffer, outputBuffer, bufferSize);
                 break;
-            case 3: // FILTER_NOTCH
+            case 3: 
                 ApplyNotch(inputBuffer, outputBuffer, bufferSize);
                 break;
             default:
-                // Pass through
                 for (int sampleIndex = 0; sampleIndex < bufferSize; sampleIndex++)
                     outputBuffer[sampleIndex] = inputBuffer[sampleIndex];
                 break;

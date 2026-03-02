@@ -2,44 +2,49 @@
 #include <list>
 #include <thread>
 #include <chrono>
-#include "../../include/Functions/Window.h"
-#include "../../include/Functions/Audio.h"
-#include "../../include/Functions/ImGuiUtil.h"
-#include "../../include/Output.h"
-#include "../../include/VoltageControllFilter.h"
-#include "../../include/WaveForm.h"
 #include "imgui.h"
 #include <vector>
 #include <string>
 #include <algorithm>
 #include <cstdio>
 
+// --Local headers--
+#include "../../include/Functions/Window.h"
+#include "../../include/Functions/Audio.h"
+#include "../../include/Functions/ImGuiUtil.h"
+#include "../../include/Output.h"
+#include "../../include/VoltageControllFilter.h"
+#include "../../include/WaveForm.h"
+#include "../../include/Voltage-ControlledAmplifier.h"
+
 // --Module Type Definitions--
 enum ModuleType
 {
-    MODULE_VCO,   // VCO (Voltage Controlled Oscillator)
-    MODULE_VCF,   // VCF (Voltage Controlled Filter)
-    MODULE_VCA,   // VCA (Voltage Controlled Amplifier)
-    MODULE_OUTPUT // Output
+    MODULE_VCO,   
+    MODULE_VCF,   
+    MODULE_VCA,   
+    MODULE_OUTPUT 
 };
 
 enum FilterType
 {
-    FILTER_LP,   // Low-Pass
-    FILTER_HP,   // High-Pass
-    FILTER_BP,   // Band-Pass
-    FILTER_NOTCH // Notch
+    FILTER_LowPass,   
+    FILTER_HighPass, 
+    FILTER_BandPass,  
+    FILTER_NOTCH 
 };
 
 // --Module Instance--
+// Each module is independent - VCO modules own their waveform via vcoWave
+// No shared/global state: each module has its own configuration and parameters
 struct ModuleInstance
 {
     ModuleType Type;
     int ID;
     std::string Name;
     bool Active = true;
-    FilterType filterType = FILTER_LP; // For VCF modules
-    // Module-specific data stored here (could use variant, union, or void*)
+    FilterType filterType = FILTER_LowPass; // For VCF modules
+    WaveForm vcoWave{};                     // Private waveform for VCO modules
 };
 
 // --Rack Structure--
@@ -57,7 +62,7 @@ static int NextModuleID = 1;
 std::list<Rack> Racks;
 static int SelectedModuleID = -1;
 
-// --Audio Processing Callback (called from audio thread)--
+// --Audio Processing Callback--
 void AudioFilterCallback(float* buffer, int numSamples, void* userData)
 {
     // Process audio through the first enabled rack with an Output module
@@ -91,22 +96,21 @@ void AudioFilterCallback(float* buffer, int numSamples, void* userData)
             switch (module.Type)
             {
                 case MODULE_VCO:
-                    // VCO already generated audio
                     break;
                     
                 case MODULE_VCF:
-                    // Apply filter
                     VCF::ProcessAudio(currentInput, currentOutput, numSamples, static_cast<int>(module.filterType));
                     std::swap(currentInput, currentOutput);
                     needsSwap = !needsSwap;
                     break;
                     
                 case MODULE_VCA:
-                    // VCA (Amplifier) - not implemented yet, pass through
+                    VCA::ProcessAudio(currentInput, currentOutput, numSamples);
+                    std::swap(currentInput, currentOutput);
+                    needsSwap = !needsSwap;
                     break;
                     
                 case MODULE_OUTPUT:
-                    // Apply output volume
                     Output::ProcessAudio(currentInput, numSamples);
                     break;
             }
@@ -118,7 +122,7 @@ void AudioFilterCallback(float* buffer, int numSamples, void* userData)
             std::copy(currentInput, currentInput + numSamples, buffer);
         }
         
-        break; // Only process first rack with Output
+        break;
     }
 }
 
@@ -156,6 +160,24 @@ void AddModuleToRack(Rack &rack, ModuleType type, const std::string &name)
     module.Type = type;
     module.Name = name;
     module.Active = true;
+
+    if (type == MODULE_VCO)
+    {
+        module.vcoWave.WaveID = module.ID;
+        module.vcoWave.Enabled = true;
+        module.vcoWave.OpenWindow = true;
+        module.vcoWave.RequestDockBelow = true;
+        module.vcoWave.Type = Sine;
+        module.vcoWave.coarseTune = 440.0f;
+        module.vcoWave.Amplitude = 0.8f;
+        module.vcoWave.SampleRate = 44100;
+        module.vcoWave.vOctCV = 0.5f;
+        module.vcoWave.linearFMCV = 0.5f;
+        module.vcoWave.pwmCV = 0.5f;
+        module.vcoWave.vRange = WaveForm::Bipolar10V;
+        module.vcoWave.fmDepth = 0.0f;
+    }
+
     rack.Modules.push_back(module);
 }
 
@@ -186,11 +208,11 @@ const char *FilterTypeToString(FilterType type)
 {
     switch (type)
     {
-    case FILTER_LP:
+    case FILTER_LowPass:
         return "Low-Pass";
-    case FILTER_HP:
+    case FILTER_HighPass:
         return "High-Pass";
-    case FILTER_BP:
+    case FILTER_BandPass:
         return "Band-Pass";
     case FILTER_NOTCH:
         return "Notch";
@@ -202,7 +224,6 @@ const char *FilterTypeToString(FilterType type)
 // --Audio Processing Through Rack--
 void ProcessRackAudio(Rack& rack, float* inputBuffer, int bufferSize)
 {
-    // Check if rack has an Output module
     bool hasOutput = false;
     for (const auto& module : rack.Modules)
     {
@@ -213,21 +234,17 @@ void ProcessRackAudio(Rack& rack, float* inputBuffer, int bufferSize)
         }
     }
     
-    // Only process if rack has Output module
     if (!hasOutput || !rack.Enabled)
         return;
-    
-    // Create buffers for signal chain
+
     std::vector<float> buffer1(bufferSize);
     std::vector<float> buffer2(bufferSize);
     
-    // Copy input to first buffer
     std::copy(inputBuffer, inputBuffer + bufferSize, buffer1.begin());
     
     float* currentInput = buffer1.data();
     float* currentOutput = buffer2.data();
     
-    // Process through each module in the chain
     for (const auto& module : rack.Modules)
     {
         if (!module.Active)
@@ -236,8 +253,6 @@ void ProcessRackAudio(Rack& rack, float* inputBuffer, int bufferSize)
         switch (module.Type)
         {
             case MODULE_VCO:
-                // VCO generates signal (input is ignored for VCO)
-                // Input comes from WaveFormGen namespace
                 break;
                 
             case MODULE_VCF:
@@ -246,13 +261,11 @@ void ProcessRackAudio(Rack& rack, float* inputBuffer, int bufferSize)
                 break;
                 
             case MODULE_VCA:
-                // VCA (Amplifier) - not implemented yet, pass through
-                std::copy(currentInput, currentInput + bufferSize, currentOutput);
+                VCA::ProcessAudio(currentInput, currentOutput, bufferSize);
                 std::swap(currentInput, currentOutput);
                 break;
                 
             case MODULE_OUTPUT:
-                // Send to audio output
                 Output::ProcessAudio(currentInput, bufferSize);
                 break;
         }
@@ -275,7 +288,6 @@ int main()
 
         ImGui::Begin("Rack Manager");
 
-        // Add new rack button
         if (ImGui::Button("Add Rack"))
         {
             CreateRack("Rack " + std::to_string(NextRackID));
@@ -289,13 +301,10 @@ int main()
             Rack &rack = *rackIt;
             ImGui::PushID(rack.ID);
 
-            // Rack header with button - use TreeNode for better control
             std::string rackHeaderLabel = "Rack #" + std::to_string(rack.ID) + ": " + rack.Name;
 
-            // TreeNode doesn't span full width like CollapsingHeader, so button can be on same line
             bool rackOpen = ImGui::TreeNodeEx(rackHeaderLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
 
-            // Button on same line
             ImGui::SameLine();
             ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 4.0f);
             bool shouldDelete = false;
@@ -306,7 +315,6 @@ int main()
                 NextRackID--;
             }
 
-            // Handle deletion after rendering
             if (shouldDelete)
             {
                 if (rackOpen)
@@ -323,7 +331,6 @@ int main()
             {
                 ImGui::Indent();
 
-                // Add module button
                 std::string addButtonLabel = "Add Module##" + std::to_string(rack.ID);
                 if (ImGui::Button(addButtonLabel.c_str()))
                 {
@@ -358,7 +365,6 @@ int main()
                         moduleLabel += " [" + std::string(FilterTypeToString(module.filterType)) + "]";
                     }
 
-                    // Make module selectable with constrained width
                     bool isSelected = (module.ID == SelectedModuleID);
                     float availWidth = ImGui::GetContentRegionAvail().x;
                     float buttonWidth = 25.0f;
@@ -381,7 +387,6 @@ int main()
                         continue;
                     }
 
-                    // Check if there's a next module and draw arrow
                     auto nextModuleIt = std::next(moduleIt);
                     if (nextModuleIt != rack.Modules.end())
                     {
@@ -404,10 +409,8 @@ int main()
 
         ImGui::End();
 
-        // Module Editor Window
         if (SelectedModuleID != -1)
         {
-            // Find the selected module
             ModuleInstance *selectedModule = nullptr;
             for (auto &rack : Racks)
             {
@@ -444,7 +447,9 @@ int main()
                 {
                 case MODULE_VCO:
                 {
-                    WaveFormGen::MainImgui();
+                    ImGui::PushID(selectedModule->ID);
+                    WaveFormGen::DrawWaveFormEditor(selectedModule->vcoWave);
+                    ImGui::PopID();
                     break;
                 }
 
@@ -463,7 +468,7 @@ int main()
 
                 case MODULE_VCA:
                 {
-                    ImGui::Text("VCA Controls:");
+                    VCA::MainImGui();
                     
                     break;
                 }
@@ -495,13 +500,11 @@ int main()
         Render();
         
         // Process audio through each enabled rack
-        // (Audio processing happens in the Audio callback, this updates waveforms)
         std::vector<WaveForm> activeWaves;
         for (auto& rack : Racks)
         {
             if (!rack.Enabled) continue;
             
-            // Check if rack has Output module
             bool hasOutput = false;
             for (const auto& module : rack.Modules)
             {
@@ -512,14 +515,14 @@ int main()
                 }
             }
             
-            // Only output audio from racks with Output modules
             if (hasOutput)
             {
-                // Add all enabled VCOs to active waves
-                for (auto& wave : WaveFormGen::WaveForms)
+                for (const auto& module : rack.Modules)
                 {
-                    if (wave.Enabled)
-                        activeWaves.push_back(wave);
+                    if (module.Type == MODULE_VCO && module.Active && module.vcoWave.Enabled)
+                    {
+                        activeWaves.push_back(module.vcoWave);
+                    }
                 }
             }
         }
@@ -541,18 +544,19 @@ void MainWindow()
     Window::CreateWindow(1280, 720, "Signal Handler");
     Audio::Init();
     
-    // Register filter callback for rack processing
     Audio::SetFilterCallback(AudioFilterCallback, nullptr);
     
     Window::PollEvents();
 }
 
+// --Memory Cleanup--
 void CleanUp()
 {
     Window::DestroyWindow();
     Audio::Close();
 }
 
+// --Rendering for ImGui and Window--
 void Render()
 {
     Window::ClearColor(0.08f, 0.08f, 0.10f, 1.0f); // Darker background matching theme
@@ -563,7 +567,8 @@ void Render()
 
 void ImGuiFuncGen()
 {
-    WaveFormGen::MainImgui();
+    // VCO management is now integrated with Rack Manager
+    // No standalone VCO UI needed
 }
 
 void DrawConnectors(const Rack &rack)
@@ -571,7 +576,6 @@ void DrawConnectors(const Rack &rack)
     if (rack.Modules.size() < 2)
         return;
     
-    // Draw connectors between all consecutive modules
     int moduleCount = 0;
     for (auto moduleIt = rack.Modules.begin(); moduleIt != rack.Modules.end(); ++moduleIt)
     {

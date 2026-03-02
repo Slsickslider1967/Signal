@@ -81,7 +81,6 @@ namespace ImGuiUtil
 
     void Oscilloscope(WaveForm &wave, const char *label)
     {
-        // Prevent aliasing: limit display frequency to Nyquist (sampleRate/2)
         float nyquist = static_cast<float>(wave.SampleRate) * 0.5f;
         float freqMax = std::min(20000.0f, nyquist);
         if (wave.Frequency > freqMax)
@@ -90,7 +89,6 @@ namespace ImGuiUtil
             ImGui::TextColored(ImVec4(1, 0.5f, 0, 1), "Frequency clamped to Nyquist: %.0f Hz", freqMax);
         }
 
-        // Use a smaller buffer for display to avoid plotting excessive points each frame
         int displaySamples = std::min(wave.SampleRate, 2048);
 
         std::vector<float> displayBuffer(displaySamples);
