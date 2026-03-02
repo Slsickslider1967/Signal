@@ -3,6 +3,7 @@
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
 #include "imgui.h"
+#include "implot.h"
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_opengl3.h"
 
@@ -12,11 +13,15 @@
 
 namespace Window 
 {
+    // --Function Prototypes--
+    void ImGuiInit();
+    void ImGuiShutdown();
+    void ImGuiStyleSetUp(ImGuiStyle &style, ImVec4* colours);
+
     static GLFWwindow* s_Window = nullptr;
     void CreateWindow(int Width, int Height, const char* Title)
     {
-        // If the user requests X11 preference at runtime (for XWayland), adjust
-        // environment so GLFW prefers X11 over Wayland before initialization.
+        //X11 for multi viewports
         const char* preferX11 = std::getenv("PREFER_X11");
         if (preferX11 && preferX11[0] != '\0')
         {
@@ -25,9 +30,6 @@ namespace Window
             unsetenv("WAYLAND_DISPLAY");
         }
         std::cout << "Creating window: " << Title << " (" << Width << "x" << Height << ")" << std::endl;
-        // Optionally create the main GLFW window hidden so ImGui can use
-        // platform (multi-)viewports as top-level windows while the "main"
-        // host remains invisible. Enable by setting HIDE_MAIN_WINDOW=1.
         const char* hideMain = std::getenv("HIDE_MAIN_WINDOW");
         bool hideMainWindow = (hideMain && hideMain[0] != '\0');
         if (hideMainWindow)
@@ -38,8 +40,7 @@ namespace Window
         {
             std::cerr << "Failed to initialize GLFW" << std::endl;
         }   
-        // If hidden, creating a small offscreen window provides an OpenGL
-        // context for ImGui platform windows to use.
+
         int winW = hideMainWindow ? 1 : Width;
         int winH = hideMainWindow ? 1 : Height;
         s_Window = glfwCreateWindow(winW, winH, Title, NULL, NULL);
@@ -51,8 +52,6 @@ namespace Window
         }
 
         glfwMakeContextCurrent(s_Window);
-        // Initialize GL loader (glad) so ImGui multi-viewport/platform windows
-        // can create and use GL functions in their contexts.
         int glad_ver = gladLoadGL(glfwGetProcAddress);
         if (glad_ver == 0)
         {
@@ -69,7 +68,6 @@ namespace Window
         std::cout << "Destroying window" << std::endl;
         if (s_Window)
         {
-            // Shutdown ImGui properly before destroying the GL context
             ImGuiShutdown();
             glfwDestroyWindow(s_Window);
             s_Window = nullptr;
@@ -93,8 +91,7 @@ namespace Window
     void ImGuiInit()
     {
         std::cout << "Initializing ImGui" << std::endl;
-        // Report which display backend is active so the developer can verify
-        // whether X11 (XWayland) or Wayland is being used by the process.
+
         const char* wayland = std::getenv("WAYLAND_DISPLAY");
         const char* display = std::getenv("DISPLAY");
         if (wayland && wayland[0] != '\0')
@@ -105,21 +102,25 @@ namespace Window
             std::cout << "No Wayland or X11 display detected in environment" << std::endl;
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
+        ImPlot::CreateContext();
         ImGuiIO& io = ImGui::GetIO(); (void)io;
-        // Enable keyboard controls, docking and multi-viewport
+
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
         io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
         io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
 
-        ImGui::StyleColorsDark();
-        // When viewports are enabled we tweak WindowRounding/WindowBg so platform windows
-        // look consistent with main window.
         ImGuiStyle& style = ImGui::GetStyle();
+        ImVec4* colours = style.Colors;
+        
+        ImGuiStyleSetUp(style, colours);
+        
+        // Multi-viewport compatibility
         if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
         {
-            style.WindowRounding = 0.0f;
+            style.WindowRounding = 6.0f;
             style.Colors[ImGuiCol_WindowBg].w = 1.0f;
         }
+    
 
         // Initialize platform/renderer backends
         ImGui_ImplGlfw_InitForOpenGL(s_Window, true);
@@ -133,6 +134,7 @@ namespace Window
     {
         ImGui_ImplOpenGL3_Shutdown();
         ImGui_ImplGlfw_Shutdown();
+        ImPlot::DestroyContext();
         ImGui::DestroyContext();
     }
 
@@ -163,5 +165,86 @@ namespace Window
             return;
         }
         glfwGetFramebufferSize(s_Window, width, height);
+    }
+
+    void ImGuiStyleSetUp(ImGuiStyle &style, ImVec4* colours)
+    {
+        colours[ImGuiCol_Text]                   = ImVec4(0.95f, 0.95f, 0.95f, 1.00f);
+        colours[ImGuiCol_TextDisabled]           = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
+        colours[ImGuiCol_WindowBg]               = ImVec4(0.12f, 0.12f, 0.14f, 1.00f);
+        colours[ImGuiCol_ChildBg]                = ImVec4(0.15f, 0.15f, 0.17f, 1.00f);
+        colours[ImGuiCol_PopupBg]                = ImVec4(0.10f, 0.10f, 0.12f, 0.95f);
+        colours[ImGuiCol_Border]                 = ImVec4(0.25f, 0.25f, 0.27f, 1.00f);
+        colours[ImGuiCol_BorderShadow]           = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+        colours[ImGuiCol_FrameBg]                = ImVec4(0.18f, 0.18f, 0.20f, 1.00f);
+        colours[ImGuiCol_FrameBgHovered]         = ImVec4(0.25f, 0.25f, 0.28f, 1.00f);
+        colours[ImGuiCol_FrameBgActive]          = ImVec4(0.30f, 0.30f, 0.34f, 1.00f);
+        colours[ImGuiCol_TitleBg]                = ImVec4(0.10f, 0.10f, 0.12f, 1.00f);
+        colours[ImGuiCol_TitleBgActive]          = ImVec4(0.15f, 0.15f, 0.17f, 1.00f);
+        colours[ImGuiCol_TitleBgCollapsed]       = ImVec4(0.10f, 0.10f, 0.12f, 0.75f);
+        colours[ImGuiCol_MenuBarBg]              = ImVec4(0.15f, 0.15f, 0.17f, 1.00f);
+        colours[ImGuiCol_ScrollbarBg]            = ImVec4(0.10f, 0.10f, 0.12f, 1.00f);
+        colours[ImGuiCol_ScrollbarGrab]          = ImVec4(0.30f, 0.30f, 0.34f, 1.00f);
+        colours[ImGuiCol_ScrollbarGrabHovered]   = ImVec4(0.40f, 0.40f, 0.44f, 1.00f);
+        colours[ImGuiCol_ScrollbarGrabActive]    = ImVec4(0.50f, 0.50f, 0.54f, 1.00f);
+        colours[ImGuiCol_CheckMark]              = ImVec4(0.20f, 0.70f, 0.90f, 1.00f);
+        colours[ImGuiCol_SliderGrab]             = ImVec4(0.20f, 0.70f, 0.90f, 1.00f);
+        colours[ImGuiCol_SliderGrabActive]       = ImVec4(0.30f, 0.80f, 1.00f, 1.00f);
+        colours[ImGuiCol_Button]                 = ImVec4(0.22f, 0.22f, 0.25f, 1.00f);
+        colours[ImGuiCol_ButtonHovered]          = ImVec4(0.28f, 0.28f, 0.32f, 1.00f);
+        colours[ImGuiCol_ButtonActive]           = ImVec4(0.20f, 0.70f, 0.90f, 1.00f);
+        colours[ImGuiCol_Header]                 = ImVec4(0.22f, 0.22f, 0.25f, 1.00f);
+        colours[ImGuiCol_HeaderHovered]          = ImVec4(0.28f, 0.28f, 0.32f, 1.00f);
+        colours[ImGuiCol_HeaderActive]           = ImVec4(0.25f, 0.65f, 0.85f, 1.00f);
+        colours[ImGuiCol_Separator]              = ImVec4(0.25f, 0.25f, 0.27f, 1.00f);
+        colours[ImGuiCol_SeparatorHovered]       = ImVec4(0.35f, 0.35f, 0.39f, 1.00f);
+        colours[ImGuiCol_SeparatorActive]        = ImVec4(0.40f, 0.40f, 0.44f, 1.00f);
+        colours[ImGuiCol_ResizeGrip]             = ImVec4(0.20f, 0.20f, 0.23f, 1.00f);
+        colours[ImGuiCol_ResizeGripHovered]      = ImVec4(0.28f, 0.28f, 0.32f, 1.00f);
+        colours[ImGuiCol_ResizeGripActive]       = ImVec4(0.20f, 0.70f, 0.90f, 1.00f);
+        colours[ImGuiCol_Tab]                    = ImVec4(0.18f, 0.18f, 0.20f, 1.00f);
+        colours[ImGuiCol_TabHovered]             = ImVec4(0.28f, 0.28f, 0.32f, 1.00f);
+        colours[ImGuiCol_TabActive]              = ImVec4(0.25f, 0.25f, 0.28f, 1.00f);
+        colours[ImGuiCol_TabUnfocused]           = ImVec4(0.15f, 0.15f, 0.17f, 1.00f);
+        colours[ImGuiCol_TabUnfocusedActive]     = ImVec4(0.20f, 0.20f, 0.23f, 1.00f);
+        colours[ImGuiCol_DockingPreview]         = ImVec4(0.20f, 0.70f, 0.90f, 0.70f);
+        colours[ImGuiCol_DockingEmptyBg]         = ImVec4(0.08f, 0.08f, 0.10f, 1.00f);
+        colours[ImGuiCol_PlotLines]              = ImVec4(0.20f, 0.70f, 0.90f, 1.00f);
+        colours[ImGuiCol_PlotLinesHovered]       = ImVec4(0.30f, 0.80f, 1.00f, 1.00f);
+        colours[ImGuiCol_PlotHistogram]          = ImVec4(0.20f, 0.70f, 0.90f, 1.00f);
+        colours[ImGuiCol_PlotHistogramHovered]   = ImVec4(0.30f, 0.80f, 1.00f, 1.00f);
+        colours[ImGuiCol_TableHeaderBg]          = ImVec4(0.18f, 0.18f, 0.20f, 1.00f);
+        colours[ImGuiCol_TableBorderStrong]      = ImVec4(0.25f, 0.25f, 0.27f, 1.00f);
+        colours[ImGuiCol_TableBorderLight]       = ImVec4(0.20f, 0.20f, 0.22f, 1.00f);
+        colours[ImGuiCol_TableRowBg]             = ImVec4(0.00f, 0.00f, 0.00f, 0.00f);
+        colours[ImGuiCol_TableRowBgAlt]          = ImVec4(1.00f, 1.00f, 1.00f, 0.03f);
+        colours[ImGuiCol_TextSelectedBg]         = ImVec4(0.25f, 1.55f, 1.95f, 1.f);
+        colours[ImGuiCol_DragDropTarget]         = ImVec4(1.f, .75f, .3333333333333333F, .9F);
+        colours[ImGuiCol_NavHighlight]           = ImVec4(0.20f, 0.70f, 0.90f, 1.00f);
+        colours[ImGuiCol_NavWindowingHighlight]  = ImVec4(1.00f, 1.00f, 1.00f, 0.70f);
+        colours[ImGuiCol_NavWindowingDimBg]      = ImVec4(0.80f, 0.80f, 0.80f, 0.20f);
+        colours[ImGuiCol_ModalWindowDimBg]       = ImVec4(0.00f, 0.00f, 0.00f, 0.60f);
+        
+        style.WindowPadding                     = ImVec2(10.0f, 10.0f);
+        style.FramePadding                      = ImVec2(8.0f, 4.0f);
+        style.ItemSpacing                       = ImVec2(8.0f, 6.0f);
+        style.ItemInnerSpacing                  = ImVec2(6.0f, 4.0f);
+        style.IndentSpacing                     = 22.0f;
+        style.ScrollbarSize                     = 14.0f;
+        style.GrabMinSize                       = 10.0f;
+        
+        style.WindowRounding                    = 6.0f;
+        style.ChildRounding                     = 4.0f;
+        style.FrameRounding                     = 4.0f;
+        style.PopupRounding                     = 4.0f;
+        style.ScrollbarRounding                 = 6.0f;
+        style.GrabRounding                      = 3.0f;
+        style.TabRounding                       = 4.0f;
+        
+        style.WindowBorderSize                  = 1.0f;
+        style.ChildBorderSize                   = 1.0f;
+        style.PopupBorderSize                   = 1.0f;
+        style.FrameBorderSize                   = 0.0f;
+        style.TabBorderSize                     = 0.0f;
     }
 }

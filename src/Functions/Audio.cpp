@@ -19,51 +19,62 @@ namespace Audio
     static std::shared_ptr<std::vector<WaveForm>> gActiveWaves;
     static int gSampleRate = 44100;
     static bool gInitialized = false;
+    
+    // Filter callback for rack processing
+    static FilterCallback gFilterCallback = nullptr;
+    static void* gFilterUserData = nullptr;
 
     // SDL audio callback: fills `stream` with `len` bytes of float samples.
     static void SDLCALL AudioCallback(void* userdata, Uint8* stream, int len)
     {
-        const int samples = len / static_cast<int>(sizeof(float));
-        float* out = reinterpret_cast<float*>(stream);
+        const int sampleCount = len / static_cast<int>(sizeof(float));
+        float* outputSamples = reinterpret_cast<float*>(stream);
 
         // Zero output by default
-        std::fill(out, out + samples, 0.0f);
+        std::fill(outputSamples, outputSamples + sampleCount, 0.0f);
 
 
         // read current active waves atomically (lock-free)
-        auto wavesPtr = std::atomic_load(&gActiveWaves);
-        if (!wavesPtr || wavesPtr->empty()) return;
+        auto activeWavesSnapshot = std::atomic_load(&gActiveWaves);
+        if (!activeWavesSnapshot || activeWavesSnapshot->empty()) return;
 
         // temporary buffer reused per-wave to avoid allocating in callback
-        static thread_local std::vector<float> tmpBuffer;
-        if ((int)tmpBuffer.size() < samples) tmpBuffer.resize(samples);
+        static thread_local std::vector<float> waveSampleBuffer;
+        if ((int)waveSampleBuffer.size() < sampleCount) waveSampleBuffer.resize(sampleCount);
 
         // mix active waves (modify per-wave Phase stored inside the active vector)
-        for (size_t w = 0; w < wavesPtr->size(); ++w)
+        for (size_t waveIndex = 0; waveIndex < activeWavesSnapshot->size(); ++waveIndex)
         {
-            WaveForm& wave = (*wavesPtr)[w];
+            WaveForm& wave = (*activeWavesSnapshot)[waveIndex];
             if (!wave.Enabled) continue;
 
             wave.SampleRate = gSampleRate;
 
-            GetWaveFormData(wave, tmpBuffer.data(), samples, 0);
+            GetWaveFormData(wave, waveSampleBuffer.data(), sampleCount, 0);
 
             // add to output
-            for (int i = 0; i < samples; ++i) out[i] += tmpBuffer[i];
+            for (int sampleIndex = 0; sampleIndex < sampleCount; ++sampleIndex)
+                outputSamples[sampleIndex] += waveSampleBuffer[sampleIndex];
+        }
+        
+        if (gFilterCallback)
+        {
+            gFilterCallback(outputSamples, sampleCount, gFilterUserData);
         }
 
         // soft clipping if necessary
         float peak = 0.0f;
-        for (int i = 0; i < samples; ++i)
+        for (int sampleIndex = 0; sampleIndex < sampleCount; ++sampleIndex)
         {
-            float v = out[i];
-            if (v < 0.0f) v = -v;
-            if (v > peak) peak = v;
+            float absoluteSample = outputSamples[sampleIndex];
+            if (absoluteSample < 0.0f) absoluteSample = -absoluteSample;
+            if (absoluteSample > peak) peak = absoluteSample;
         }
         if (peak > 0.999f)
         {
             float scale = 0.9f / peak;
-            for (int i = 0; i < samples; ++i) out[i] *= scale;
+            for (int sampleIndex = 0; sampleIndex < sampleCount; ++sampleIndex)
+                outputSamples[sampleIndex] *= scale;
         }
     }
 
@@ -76,16 +87,16 @@ namespace Audio
             return;
         }
 
-        SDL_AudioSpec spec;
-        spec.freq = gSampleRate;
-        spec.format = AUDIO_F32SYS;
-        spec.channels = 1;
-        spec.samples = 12000; 
-        spec.callback = AudioCallback;
-        spec.userdata = nullptr;
+        SDL_AudioSpec requestedSpec;
+        requestedSpec.freq = gSampleRate;
+        requestedSpec.format = AUDIO_F32SYS;
+        requestedSpec.channels = 1;
+        requestedSpec.samples = 12000; 
+        requestedSpec.callback = AudioCallback;
+        requestedSpec.userdata = nullptr;
 
-        SDL_AudioSpec obtained;
-        gDevice = SDL_OpenAudioDevice(nullptr, 0, &spec, &obtained, 0);
+        SDL_AudioSpec obtainedSpec;
+        gDevice = SDL_OpenAudioDevice(nullptr, 0, &requestedSpec, &obtainedSpec, 0);
         if (gDevice == 0)
         {
             std::cerr << "Failed to open audio device: " << SDL_GetError() << std::endl;
@@ -94,7 +105,7 @@ namespace Audio
         }
 
         // adopt the device's actual sample rate
-        gSampleRate = (obtained.freq > 0) ? obtained.freq : spec.freq;
+        gSampleRate = (obtainedSpec.freq > 0) ? obtainedSpec.freq : requestedSpec.freq;
         // initialize empty active waves list if not set
         if (!std::atomic_load(&gActiveWaves))
             std::atomic_store(&gActiveWaves, std::make_shared<std::vector<WaveForm>>());
@@ -129,43 +140,56 @@ namespace Audio
         if (!gInitialized) return;
 
         // prepare a new vector based on current active waves, then atomically swap
-        auto curr = std::atomic_load(&gActiveWaves);
-        std::shared_ptr<std::vector<WaveForm>> next;
-        if (curr) next = std::make_shared<std::vector<WaveForm>>(*curr);
-        else next = std::make_shared<std::vector<WaveForm>>();
+        auto currentWaves = std::atomic_load(&gActiveWaves);
+        std::shared_ptr<std::vector<WaveForm>> updatedWaves;
+        if (currentWaves) updatedWaves = std::make_shared<std::vector<WaveForm>>(*currentWaves);
+        else updatedWaves = std::make_shared<std::vector<WaveForm>>();
 
-        WaveForm copy = wave;
-        copy.SampleRate = gSampleRate;
-        copy.Enabled = true;
-        next->push_back(copy);
+        WaveForm waveCopy = wave;
+        waveCopy.SampleRate = gSampleRate;
+        waveCopy.Enabled = true;
+        updatedWaves->push_back(waveCopy);
 
-        std::atomic_store(&gActiveWaves, next);
+        std::atomic_store(&gActiveWaves, updatedWaves);
     }
 
     void SetWaveForms(const std::vector<WaveForm>& waves)
     {
         if (!gInitialized) Init();
         // prepare new vector and preserve existing per-wave Phase where WaveID matches
-        auto curr = std::atomic_load(&gActiveWaves);
-        auto next = std::make_shared<std::vector<WaveForm>>(waves);
-        for (auto& w : *next) { w.SampleRate = gSampleRate; }
+        auto currentWaves = std::atomic_load(&gActiveWaves);
+        auto updatedWaves = std::make_shared<std::vector<WaveForm>>(waves);
+        for (auto& updatedWave : *updatedWaves) { updatedWave.SampleRate = gSampleRate; }
 
-        if (curr)
+        if (currentWaves)
         {
             // preserve phase by matching WaveID
-            for (auto& newW : *next)
+            for (auto& updatedWave : *updatedWaves)
             {
-                for (const auto& oldW : *curr)
+                for (const auto& existingWave : *currentWaves)
                 {
-                    if (oldW.WaveID == newW.WaveID)
+                    if (existingWave.WaveID == updatedWave.WaveID)
                     {
-                        newW.Phase = oldW.Phase;
+                        updatedWave.Phase = existingWave.Phase;
                         break;
                     }
                 }
             }
         }
 
-        std::atomic_store(&gActiveWaves, next);
+        std::atomic_store(&gActiveWaves, updatedWaves);
+    }
+
+    void WriteAudio(float* buffer, int numSamples)
+    {
+        if (!gInitialized) return;
+        if (!buffer || numSamples <= 0) return;
+        std::fill(buffer, buffer + numSamples, 0.0f);
+    }
+    
+    void SetFilterCallback(FilterCallback callback, void* userData)
+    {
+        gFilterCallback = callback;
+        gFilterUserData = userData;
     }
 }

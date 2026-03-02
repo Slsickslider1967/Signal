@@ -1,107 +1,172 @@
 #include <cmath>
+#include <random>
 #include "../../include/WaveForm.h"
+
+// === VOLTAGE UTILITY FUNCTIONS ===
+
+float NormalizedToVoltage(float normalized, WaveForm::VoltageRange range)
+{
+    double maxVoltage = 10.0;
+    switch (range)
+    {
+        case WaveForm::Bipolar5V: maxVoltage = 5.0; break;
+        case WaveForm::Bipolar10V: maxVoltage = 10.0; break;
+        case WaveForm::Bipolar12V: maxVoltage = 12.0; break;
+        case WaveForm::Bipolar15V: maxVoltage = 15.0; break;
+        default: maxVoltage = 10.0; break;
+    }
+    // Map 0..1 to -maxVoltage..+maxVoltage
+    return (normalized * 2.0f - 1.0f) * maxVoltage;
+}
+
+float VoltageToNormalized(float voltage, WaveForm::VoltageRange range)
+{
+    double maxVoltage = 10.0;
+    switch (range)
+    {
+        case WaveForm::Bipolar5V: maxVoltage = 5.0; break;
+        case WaveForm::Bipolar10V: maxVoltage = 10.0; break;
+        case WaveForm::Bipolar12V: maxVoltage = 12.0; break;
+        case WaveForm::Bipolar15V: maxVoltage = 15.0; break;
+        default: maxVoltage = 10.0; break;
+    }
+    // Map -maxVoltage..+maxVoltage to 0..1
+    return (voltage / maxVoltage + 1.0f) * 0.5f;
+}
+
+// === VCO SIGNAL GENERATION (PURE OSCILLATOR) ===
+
+// === VCO SIGNAL GENERATION (PURE OSCILLATOR) ===
 
 void GetWaveFormData(WaveForm& wave, float* buffer, int bufferSize, int startSample)
 {
+    // Safety checks
     if (!buffer || bufferSize <= 0) return;
-    const double twoPi = 6.283185307179586476925286766559;
     if (wave.SampleRate <= 0) return;
+    
+    const double twoPi = 6.283185307179586476925286766559;
 
-    // Wave state
+    // Initialize phase
     double phase = wave.Phase;
     phase = std::fmod(phase, twoPi);
+    
+    // Create a local noise generator for this call (thread-safe)
+    static thread_local std::mt19937 noiseGen(std::random_device{}());
+    std::uniform_real_distribution<float> noiseDist(-1.0f, 1.0f);
 
-    // Map normalized CV (0..1) to an actual bipolar voltage based on selected range
-    double vMax = 5.0;
-    switch (wave.vRange)
-    {
-        case WaveForm::Bipolar5V: vMax = 5.0; break;
-        case WaveForm::Bipolar10V: vMax = 10.0; break;
-        case WaveForm::Bipolar12V: vMax = 12.0; break;
-        case WaveForm::Bipolar15V: vMax = 15.0; break;
-        default: vMax = 5.0; break;
-    }
-    double cvVolt = (static_cast<double>(wave.cv) * 2.0 - 1.0) * vMax;
-
-    // Determine effective parameters based on CV routing
-    double freqEff = static_cast<double>(wave.Frequency);
-    double ampEff = static_cast<double>(wave.Amplitude);
-    double driveCVScale = 1.0;
-    if (wave.cvDest == WaveForm::CV_Frequency)
-    {
-        // map normalized CV (-1..1) to +/-4 octaves
-        double cvNorm = (static_cast<double>(wave.cv) - 0.5) * 2.0;
-        double maxOctaves = 4.0;
-        freqEff = freqEff * std::pow(2.0, cvNorm * maxOctaves);
-    }
-    else if (wave.cvDest == WaveForm::CV_Amplitude)
-    {
-        // map CV to amplitude multiplier (avoid zero)
-        ampEff = ampEff * (0.1 + static_cast<double>(wave.cv) * 1.9);
-    }
-    else if (wave.cvDest == WaveForm::CV_Drive)
-    {
-        // increase drive proportionally when CV is large
-        driveCVScale = 1.0 + (std::abs(cvVolt) / vMax);
+    // Get voltage range max
+    double maxVoltage = 10.0;
+    switch (wave.vRange) {
+        case WaveForm::Bipolar5V: maxVoltage = 5.0; break;
+        case WaveForm::Bipolar10V: maxVoltage = 10.0; break;
+        case WaveForm::Bipolar12V: maxVoltage = 12.0; break;
+        case WaveForm::Bipolar15V: maxVoltage = 15.0; break;
+        default: maxVoltage = 10.0; break;
     }
 
-    double delta = twoPi * freqEff * wave.Speed / static_cast<double>(wave.SampleRate);
+    // === COMPUTE FREQUENCY FROM V/Oct CV ===
+    // 1V/octave standard: 1V = 1 octave change
+    // vOctCV of 0.5 = 0V = no change
+    double vOctVoltage = NormalizedToVoltage(wave.vOctCV, wave.vRange);
+    double octaveFromCV = vOctVoltage / 1.0;  // 1V = 1 octave
+    
+    // Combine all pitch controls
+    double totalOctaveShift = wave.octave + octaveFromCV;
+    double fineTuneRatio = std::pow(2.0, wave.fineTune / 1200.0);  // cents to ratio
+    double baseFreq = wave.coarseTune * std::pow(2.0, totalOctaveShift) * fineTuneRatio;
+    
+    // Apply Linear FM if enabled
+    double fmFrequencyOffset = 0.0;
+    if (wave.fmDepth > 0.0)
+    {
+        double fmVoltage = NormalizedToVoltage(wave.linearFMCV, wave.vRange);
+        fmFrequencyOffset = (fmVoltage / maxVoltage) * wave.fmDepth * baseFreq * 2.0;  // Linear FM
+    }
+    
+    double finalFreq = baseFreq + fmFrequencyOffset;
+    if (finalFreq < 0.1) finalFreq = 0.1;  // Prevent negative/zero frequency
+    
+    wave.Frequency = finalFreq;  // Store computed frequency
 
-    for (int i = 0; i < bufferSize; ++i)
+    // === PHASE INCREMENT ===
+    double phaseIncrement = twoPi * finalFreq / static_cast<double>(wave.SampleRate);
+    
+    // Handle hard sync at buffer start
+    if (wave.syncInput)
+    {
+        phase = 0.0;
+        wave.syncInput = false;  // Reset trigger
+    }
+
+    // === GENERATE VCO WAVEFORM SAMPLES ===
+    for (int sampleIndex = 0; sampleIndex < bufferSize; ++sampleIndex)
     {
         double value = 0.0;
+        
+        // Generate waveform voltage with bounds checking
         switch (wave.Type)
         {
         case Sine:
             value = std::sin(phase);
             break;
+            
         case Square:
             value = (std::sin(phase) >= 0.0) ? 1.0 : -1.0;
             break;
+            
         case Sawtooth:
             {
-                double x = (phase / twoPi);
-                double frac = x - std::floor(x);
-                value = 2.0 * (frac - 0.5);
+                double normalizedPhase = (phase / twoPi);
+                double phaseFraction = normalizedPhase - std::floor(normalizedPhase);
+                value = 2.0 * (phaseFraction - 0.5);
             }
             break;
+            
         case Triangle:
             {
-                double x = (phase / twoPi);
-                double frac = x - std::floor(x);
-                value = 2.0 * std::abs(2.0 * (frac) - 1.0) - 1.0;
+                double normalizedPhase = (phase / twoPi);
+                double phaseFraction = normalizedPhase - std::floor(normalizedPhase);
+                value = 2.0 * std::abs(2.0 * phaseFraction - 1.0) - 1.0;
             }
             break;
-        case Tangent:
+            
+        case Pulse:  // Variable pulse width controlled by PWM CV
             {
-                value = std::tan(phase);
+                double normalizedPhase = (phase / twoPi);
+                double phaseFraction = normalizedPhase - std::floor(normalizedPhase);
+                double pulseWidth = std::max(0.05, std::min(0.95, (double)wave.pwmCV));
+                value = (phaseFraction < pulseWidth) ? 1.0 : -1.0;
             }
             break;
+            
+        case Noise:  // White noise generator
+            value = noiseDist(noiseGen);
+            break;
+            
         default:
-            value = 0.0;
+            // Default to sine if invalid type
+            value = std::sin(phase);
             break;
         }
+        
+        // Scale to output voltage range
+        double normalizedOutput = value * wave.Amplitude;
+        
+        // Clip to voltage rails
+        if (normalizedOutput > 1.0) normalizedOutput = 1.0;
+        if (normalizedOutput < -1.0) normalizedOutput = -1.0;
+        
+        buffer[sampleIndex] = static_cast<float>(normalizedOutput);
+        wave.currentVoltageOut = static_cast<float>(normalizedOutput * maxVoltage);  // Store actual voltage for monitoring
 
-        // Apply harmonic mixing (second harmonic) for timbral change across all types
-        double secondHarm = std::sin(2.0 * phase);
-        value = (1.0 - wave.harmonicMix) * value + (wave.harmonicMix) * secondHarm;
-
-        // Apply folding/non-linear drive influenced by foldAmount and CV (Serge-like)
-        if (wave.foldAmount > 0.0)
-        {
-            double drive = 1.0 + wave.foldAmount * (std::abs(cvVolt) / vMax) * 8.0;
-            drive *= driveCVScale; // include CV-driven extra when routed
-            value = std::tanh(value * drive);
-        }
-
-        // Apply amplitude and clamp (use ampEff)
-        double out = value * ampEff;
-        if (out > 1.0) out = 1.0;
-        if (out < -1.0) out = -1.0;
-        buffer[i] = static_cast<float>(out);
-
-        phase += delta;
-        if (phase >= twoPi || phase <= -twoPi) phase = std::fmod(phase, twoPi);
+        // Advance oscillator phase
+        phase += phaseIncrement;
+        
+        // Wrap phase
+        if (phase >= twoPi) phase -= twoPi;
+        if (phase < 0.0) phase += twoPi;
     }
+    
+    // Store phase state
     wave.Phase = phase;
 }

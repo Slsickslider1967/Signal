@@ -3,7 +3,7 @@
 #include "../../include/WaveForm.h"
 #include "../../include/Functions/Audio.h"
 #include "../../include/Functions/ImGuiUtil.h"
-#include "../../include/SpeedManipulation.h"
+#include "../../include/VoltageControllFilter.h"
 #include "imgui.h"
 #include "imgui_internal.h"
 #include <list>
@@ -14,7 +14,6 @@
 #include <string>
 #include <GLFW/glfw3.h>
 
-// NOTE: `GetWaveFormData` is declared in include/WaveForm.h — no local prototype.
 namespace WaveFormGen
 {
     // --Main Variables--
@@ -23,131 +22,190 @@ namespace WaveFormGen
 
     // --ImGui UI functions exposed as an "addon" --
     void DisplayWaveForm();
-    void DrawWaveFromsMenuu(WaveForm &wave);
 
     void MainImgui()
     {
-        // ImGui::SetNextWindowPos(ImVec2(60, 60), ImGuiCond_FirstUseEver);
-        // ImGui::SetNextWindowSize(ImVec2(420, 300), ImGuiCond_FirstUseEver);
-        ImGui::Begin("Waveform Generator");
-
         DisplayWaveForm();
 
-        if (ImGui::Button("Add Waveform"))
+        if (ImGui::Button("Add VCO"))
         {
-            // create a new waveform with sensible defaults
             WaveForm newWave;
             newWave.WaveID = NextWaveID++;
             newWave.Enabled = true;
             newWave.OpenWindow = true;
             newWave.RequestDockBelow = true;
             newWave.Type = Sine;
-            newWave.Frequency = 440.0f;
-            newWave.Amplitude = 1.0f;
+            newWave.coarseTune = 440.0f; // A4
+            newWave.Amplitude = 0.8f;
             newWave.SampleRate = 44100;
-                // sensible defaults for new CV-based controls
-                newWave.cv = 0.5f;
-                newWave.vRange = WaveForm::Bipolar5V;
-                newWave.foldAmount = 0.0f;
-                newWave.harmonicMix = 0.0f;
+            newWave.vOctCV = 0.5f; // 0V
+            newWave.linearFMCV = 0.5f;
+            newWave.pwmCV = 0.5f;
+            newWave.vRange = WaveForm::Bipolar10V; // Eurorack standard
+            newWave.fmDepth = 0.0f;
             WaveForms.push_back(newWave);
         }
 
-        // Push updated waveform list to audio system so playback reflects UI changes
-        std::vector<WaveForm> wavesVec;
-        for (auto &w : WaveForms) wavesVec.push_back(w);
-        Audio::SetWaveForms(wavesVec);
-
-        ImGui::End();
+        // Audio now routed through rack system - no direct output
+        ImGui::TextColored(ImVec4(1.0f, 1.0f, 0.0f, 1.0f), 
+            "Note: Audio only outputs via rack Output module");
     }
 
-
-    // NEeds to be merged with DrawWaveFromsMenuu
     void DisplayWaveForm()
     {
         if (WaveForms.empty())
         {
-            ImGui::Text("No waveforms. Click 'Add Waveform' to create one.");
+            ImGui::Text("No VCOs. Click 'Add VCO' to create an oscillator.");
             return;
         }
 
-        for (auto it = WaveForms.begin(); it != WaveForms.end(); )
+        for (auto waveIt = WaveForms.begin(); waveIt != WaveForms.end();)
         {
-            WaveForm &wave = *it;
+            WaveForm &wave = *waveIt;
             ImGui::PushID(wave.WaveID);
 
-            ImGui::Text("Waveform %d", wave.WaveID);
-            ImGui::SameLine();
-            if (ImGui::Button("Remove"))
+            // === VCO HEADER ===
+            ImGui::Text("VCO #%d", wave.WaveID);
+            ImGui::SameLine(100);
+            if (ImGui::Button("Delete", ImVec2(60, 0)))
             {
-                it = WaveForms.erase(it);
+                waveIt = WaveForms.erase(waveIt);
                 NextWaveID--;
                 ImGui::PopID();
                 continue;
             }
 
+            double maxVoltage = 10.0;
+            switch (wave.vRange)
+            {
+            case WaveForm::Bipolar5V:
+                maxVoltage = 5.0;
+                break;
+            case WaveForm::Bipolar10V:
+                maxVoltage = 10.0;
+                break;
+            case WaveForm::Bipolar12V:
+                maxVoltage = 12.0;
+                break;
+            case WaveForm::Bipolar15V:
+                maxVoltage = 15.0;
+                break;
+            default:
+                maxVoltage = 10.0;
+                break;
+            }
+
+            ImGui::Spacing();
             ImGui::Separator();
 
-            DrawWaveFromsMenuu(wave);
+            // === TUNING SECTION ===
+            ImGui::Text("TUNING");
+            ImGui::SliderFloat("Coarse Frequency##tune", &wave.coarseTune, 20.0f, 2000.0f);
+            ImGui::SliderInt("Octave##tune", &wave.octave, -4, 4);
+            ImGui::SliderFloat("Fine Tune##tune", &wave.fineTune, -100.0f, 100.0f);
+            ImGui::Text("Output Frequency: %.2f Hz", wave.Frequency);
 
             ImGui::Spacing();
 
-            ImGui::PopID();
-            ++it;
-        }
-    }
+            // === WAVEFORM SELECTION ===
+            ImGui::Text("WAVEFORM");
+            const char *waveNames[] = {"Sine", "Square", "Sawtooth", "Triangle", "Pulse", "Noise"};
+            WaveType waveVals[] = {Sine, Square, Sawtooth, Triangle, Pulse, Noise};
 
-
-
-    // Function settings
-    void DrawWaveFromsMenuu(WaveForm &wave)
-    {
-            if (ImGui::Button("Sine")) wave.Type = Sine; ImGui::SameLine();
-            if (ImGui::Button("Square")) wave.Type = Square; ImGui::SameLine();
-            if (ImGui::Button("Sawtooth")) wave.Type = Sawtooth; ImGui::SameLine();
-            if (ImGui::Button("Triangle")) wave.Type = Triangle; ImGui::SameLine();
-            if (ImGui::Button("Tangent")) wave.Type = Tangent;
-
-            // Voltage standard selection
-            const char* vRanges[] = {"±5V","±10V","±12V","±15V"};
-            int vr = (int)wave.vRange;
-            if (ImGui::Combo("Voltage Range", &vr, vRanges, IM_ARRAYSIZE(vRanges)))
-                wave.vRange = (WaveForm::VoltageRange)vr;
-
-            // CV and timbre controls
-            ImGui::SliderFloat("CV (norm)", &wave.cv, 0.0f, 1.0f);
-            ImGui::SliderFloat("Fold Amount", &wave.foldAmount, 0.0f, 1.0f);
-            ImGui::SliderFloat("Harmonic Mix", &wave.harmonicMix, 0.0f, 1.0f);
-            // CV destination routing
-            const char* cvDests[] = {"None","Frequency","Amplitude","Drive"};
-            int dest = (int)wave.cvDest;
-            if (ImGui::Combo("CV Destination", &dest, cvDests, IM_ARRAYSIZE(cvDests)))
-                wave.cvDest = (WaveForm::CVDestination)dest;
-
-            // Show computed CV volts and an indicative drive amount
-            double vMax = 5.0;
-            switch (wave.vRange)
+            for (int waveTypeIndex = 0; waveTypeIndex < 6; waveTypeIndex++)
             {
-                case WaveForm::Bipolar5V: vMax = 5.0; break;
-                case WaveForm::Bipolar10V: vMax = 10.0; break;
-                case WaveForm::Bipolar12V: vMax = 12.0; break;
-                case WaveForm::Bipolar15V: vMax = 15.0; break;
-                default: vMax = 5.0; break;
+                bool isSelected = (wave.Type == waveVals[waveTypeIndex]);
+                if (isSelected)
+                    ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2, 0.7, 0.2, 1.0));
+
+                if (ImGui::Button(waveNames[waveTypeIndex], ImVec2(80, 0)))
+                {
+                    wave.Type = waveVals[waveTypeIndex];
+                }
+
+                if (isSelected)
+                    ImGui::PopStyleColor();
+                if (waveTypeIndex < 5)
+                    ImGui::SameLine();
             }
-            double cvVolt = (static_cast<double>(wave.cv) * 2.0 - 1.0) * vMax;
-            double drive = 1.0 + wave.foldAmount * (std::abs(cvVolt) / vMax) * 8.0;
-            ImGui::Text("CV volts: %.3f V", cvVolt);
-            ImGui::Text("Drive (est): %.3f", drive);
+            ImGui::Text("Current Output: %.3f V", wave.currentVoltageOut);
 
-            ImGui::Separator();
-            ImGui::Checkbox("Enabled", &wave.Enabled);
+            ImGui::Spacing();
+
+            // === V/OCT SECTION ===
+            ImGui::Text("V/OCT (Pitch Control)");
+            ImGui::SliderFloat("V/Oct CV##voct", &wave.vOctCV, 0.0f, 1.0f);
+            double vOctVolt = NormalizedToVoltage(wave.vOctCV, wave.vRange);
+            ImGui::Text("  Voltage: %+.3f V  (%.2f octaves shift)", vOctVolt, vOctVolt);
+
+            ImGui::Spacing();
+
+            // === FM SECTION ===
+            ImGui::Text("Frequency Modulation");
+            ImGui::SliderFloat("FM Input##fm", &wave.linearFMCV, 0.0f, 1.0f);
+            ImGui::SliderFloat("FM Depth##fmdepth", &wave.fmDepth, 0.0f, 1.0f);
+            ImGui::Text("  FM Active: %s", wave.fmDepth > 0.0f ? "Yes" : "No");
+
+            ImGui::Spacing();
+
+            // === PWM SECTION (if Pulse) ===
+            if (wave.Type == Pulse)
+            {
+                ImGui::Text("Pulse Width Modulation");
+                ImGui::SliderFloat("PWM##pwm", &wave.pwmCV, 0.05f, 0.95f);
+                ImGui::Text("  Pulse Width: %.1f%%", wave.pwmCV * 100.0f);
+                ImGui::Spacing();
+            }
+
+            // === SYNC SECTION ===
+            ImGui::Text("Sync Control");
+            ImGui::Checkbox("Hard Sync Enable##sync", &wave.syncInput);
+            ImGui::Text("  Sync: %s", wave.syncInput ? "Active" : "Off");
+
+            ImGui::Spacing();
+
+            // === OUTPUT SECTION ===
+            ImGui::Text("Output Controls");
+            ImGui::SliderFloat("Output Level##lvl", &wave.Amplitude, 0.0f, 1.0f);
+            ImGui::Text("  Level: %.1f%%", wave.Amplitude * 100.0f);
+
+            const char *vRanges[] = {"±5V", "±10V", "±12V", "±15V"};
+            int selectedVoltageRangeIndex = (int)wave.vRange;
+            if (ImGui::Combo("Voltage Range##vrange", &selectedVoltageRangeIndex, vRanges, IM_ARRAYSIZE(vRanges)))
+            {
+                wave.vRange = (WaveForm::VoltageRange)selectedVoltageRangeIndex;
+            }
+            ImGui::Text("  Range: %.1f V to +%.1f V", -maxVoltage, maxVoltage);
+
+            ImGui::Spacing();
+
+            // === METERING ===
+            ImGui::Text("Output Meter");
+            float meterPos = (wave.currentVoltageOut / maxVoltage + 1.0f) * 0.5f;
+            ImGui::ProgressBar(meterPos, ImVec2(-1, 15), "");
+            ImGui::Text("  Voltage: %.4f V", wave.currentVoltageOut);
+
+            ImGui::Spacing();
+
+            // === SYSTEM SETTINGS ===
+            ImGui::Text("System");
+            ImGui::Checkbox("Enabled##enable", &wave.Enabled);
             ImGui::SameLine();
-            ImGui::Text("Waveform %d", wave.WaveID);
-            ImGui::SliderFloat("Frequency", &wave.Frequency, 0.0f, 20000.0f);
-            ImGui::SliderFloat("Speed", &wave.Speed, 0.01f, 16.0f);
-            ImGui::SliderFloat("Amplitude", &wave.Amplitude, 0.0f, 1.0f);
-            ImGui::SliderInt("Sample Rate", &wave.SampleRate, 8000, 96000);
+            ImGui::Text("Sample Rate:");
+            ImGui::SameLine();
+            ImGui::SliderInt("##sr", &wave.SampleRate, 8000, 96000);
 
-            ImGuiUtil::Oscilloscope(wave, "Waveform Preview");
+            ImGui::Spacing();
+
+            // === OSCILLOSCOPE ===
+            ImGuiUtil::Oscilloscope(wave, "Waveform Display");
+
+            ImGui::Spacing();
+            ImGui::Separator();
+            ImGui::Spacing();
+
+            ImGui::PopID();
+            ++waveIt;
+        }
     }
 }

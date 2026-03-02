@@ -1,5 +1,6 @@
 #include <iostream>
 #include "imgui.h"
+#include "implot.h"
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_opengl3.h"
 #include <GLFW/glfw3.h>
@@ -9,19 +10,44 @@
 
 namespace ImGuiUtil
 {
+    static void RenderSignalPlot(const float *samples, int sampleCount, const char *label, float minY, float maxY)
+    {
+        if (!samples || sampleCount <= 0)
+        {
+            return;
+        }
+
+        ImVec2 plotSize = ImVec2(-1.0f, 170.0f);
+        ImPlotFlags plotFlags = ImPlotFlags_NoMenus |
+                                ImPlotFlags_NoBoxSelect |
+                                ImPlotFlags_NoMouseText |
+                                ImPlotFlags_NoLegend;
+        ImPlotAxisFlags axisFlags = ImPlotAxisFlags_NoDecorations |
+                                    ImPlotAxisFlags_Lock;
+
+        if (ImPlot::BeginPlot(label, plotSize, plotFlags))
+        {
+            ImPlot::SetupAxes(nullptr, nullptr, axisFlags, axisFlags);
+            ImPlot::SetupAxisLimits(ImAxis_X1, 0.0, static_cast<double>(sampleCount), ImGuiCond_Always);
+            ImPlot::SetupAxisLimits(ImAxis_Y1, static_cast<double>(minY), static_cast<double>(maxY), ImGuiCond_Always);
+            ImPlot::PlotLine("Signal", samples, sampleCount);
+            ImPlot::EndPlot();
+        }
+    }
+
     void Render()
     {
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
         // Update and render additional platform windows when using multi-viewports
-        ImGuiIO& io = ImGui::GetIO();
-        if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
+        ImGuiIO& imguiIo = ImGui::GetIO();
+        if (imguiIo.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
         {
-            GLFWwindow* backup_current_context = glfwGetCurrentContext();
+            GLFWwindow* previousOpenGlContext = glfwGetCurrentContext();
             ImGui::UpdatePlatformWindows();
             ImGui::RenderPlatformWindowsDefault();
-            glfwMakeContextCurrent(backup_current_context);
+            glfwMakeContextCurrent(previousOpenGlContext);
         }
     }
 
@@ -67,13 +93,18 @@ namespace ImGuiUtil
         // Use a smaller buffer for display to avoid plotting excessive points each frame
         int displaySamples = std::min(wave.SampleRate, 2048);
 
-        std::vector<float> buf(displaySamples);
-        GetWaveFormData(wave, buf.data(), displaySamples, wave.displayOffset);
-        ImGui::PlotLines(label, buf.data(), displaySamples);
+        std::vector<float> displayBuffer(displaySamples);
+        GetWaveFormData(wave, displayBuffer.data(), displaySamples, wave.displayOffset);
+        RenderSignalPlot(displayBuffer.data(), displaySamples, label, -1.05f, 1.05f);
 
         // Advance display offset so waveform scrolls. Use fixed frame step matching ~16ms.
-        int advance = std::max(1, static_cast<int>(wave.SampleRate * 0.016f));
-        int wrap = std::max(1, wave.SampleRate * 1000);
-        wave.displayOffset = (wave.displayOffset + advance) % wrap;
+        int displayAdvanceSamples = std::max(1, static_cast<int>(wave.SampleRate * 0.016f));
+        int displayWrapLength = std::max(1, wave.SampleRate * 1000);
+        wave.displayOffset = (wave.displayOffset + displayAdvanceSamples) % displayWrapLength;
+    }
+
+    void PlotSignal(const float *samples, int sampleCount, const char *label, float minY, float maxY)
+    {
+        RenderSignalPlot(samples, sampleCount, label, minY, maxY);
     }
 }

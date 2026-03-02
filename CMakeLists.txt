@@ -3,18 +3,30 @@ cmake_minimum_required(VERSION 3.16)
 project(Signals)
 
 set(CMAKE_CXX_STANDARD 17)
+
+include(FetchContent)
+FetchContent_Declare(
+    implot
+    GIT_REPOSITORY https://github.com/epezent/implot.git
+    GIT_TAG master
+)
+FetchContent_MakeAvailable(implot)
+
 add_executable(Signals
     src/Modules/Handler.cpp
     src/Modules/WaveFormGenerator.cpp
+    src/Modules/Output.cpp
     src/Functions/Window.cpp
     src/Functions/ImGuiUtil.cpp
     src/Functions/Audio.cpp
     src/Functions/WaveForm.cpp
-    src/Modules/SpeedManipulator.cpp
+    src/Modules/VoltageControllFilter.cpp
 )
 
 target_include_directories(Signals PRIVATE ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/external/imgui)
 target_include_directories(Signals PRIVATE ${CMAKE_SOURCE_DIR}/include/Functions)
+target_include_directories(Signals PRIVATE ${CMAKE_SOURCE_DIR}/include/Modules)
+target_include_directories(Signals PRIVATE ${implot_SOURCE_DIR})
 
 # Ensure glad's generated headers are visible to ImGui backend
 target_include_directories(Signals PRIVATE ${CMAKE_BINARY_DIR}/gladsources/glad_gl_core_33/include)
@@ -31,6 +43,8 @@ set(IMGUI_SOURCES
     ${CMAKE_SOURCE_DIR}/external/imgui/imgui_demo.cpp
     ${CMAKE_SOURCE_DIR}/external/imgui/backends/imgui_impl_glfw.cpp
     ${CMAKE_SOURCE_DIR}/external/imgui/backends/imgui_impl_opengl3.cpp
+    ${implot_SOURCE_DIR}/implot.cpp
+    ${implot_SOURCE_DIR}/implot_items.cpp
 )
 
 target_sources(Signals PRIVATE ${IMGUI_SOURCES})
