@@ -22,6 +22,7 @@ add_executable(Signals
     src/Functions/WaveForm.cpp
     src/Modules/VoltageControllFilter.cpp
     src/Modules/Voltage-ControlledAmplifier.cpp
+    src/Modules/LowFrequencyOscillator.cpp
 )
 
 target_include_directories(Signals PRIVATE ${CMAKE_SOURCE_DIR}/include ${CMAKE_SOURCE_DIR}/external/imgui)

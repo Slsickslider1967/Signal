@@ -61,7 +61,10 @@ namespace VCA
         EnvolopeShaping();
         DynamicRangeControl();
 
-        ImGuiUtil::Oscilloscope(Buffer, "VCA Output Display");
+        if (hasVCAScopeData.load(std::memory_order_acquire))
+        {
+            ImGuiUtil::PlotSignal(vcaScopeBuffer.data(), scopeBufferSize, "VCA Output Display");
+        }
     }
 
     void AmpControl()
@@ -112,6 +115,7 @@ namespace VCA
 
     void CV(float *buffer, int numSamples)
     {
+        
     }
 
     void Envelope(float *buffer, int numSamples)

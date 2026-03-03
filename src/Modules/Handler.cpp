@@ -16,22 +16,24 @@
 #include "../../include/VoltageControllFilter.h"
 #include "../../include/WaveForm.h"
 #include "../../include/Voltage-ControlledAmplifier.h"
+#include "../../include/LowFrequencyOscillator.h"
 
 // --Module Type Definitions--
 enum ModuleType
 {
-    MODULE_VCO,   
-    MODULE_VCF,   
-    MODULE_VCA,   
-    MODULE_OUTPUT 
+    MODULE_VCO,
+    MODULE_LFO,
+    MODULE_VCF,
+    MODULE_VCA,
+    MODULE_OUTPUT
 };
 
 enum FilterType
 {
-    FILTER_LowPass,   
-    FILTER_HighPass, 
-    FILTER_BandPass,  
-    FILTER_NOTCH 
+    FILTER_LowPass,
+    FILTER_HighPass,
+    FILTER_BandPass,
+    FILTER_NOTCH
 };
 
 // --Module Instance--
@@ -63,14 +65,15 @@ std::list<Rack> Racks;
 static int SelectedModuleID = -1;
 
 // --Audio Processing Callback--
-void AudioFilterCallback(float* buffer, int numSamples, void* userData)
+void AudioFilterCallback(float *buffer, int numSamples, void *userData)
 {
-    for (auto& rack : Racks)
+    for (auto &rack : Racks)
     {
-        if (!rack.Enabled) continue;
-        
+        if (!rack.Enabled)
+            continue;
+
         bool hasOutput = false;
-        for (const auto& module : rack.Modules)
+        for (const auto &module : rack.Modules)
         {
             if (module.Type == MODULE_OUTPUT && module.Active)
             {
@@ -78,54 +81,58 @@ void AudioFilterCallback(float* buffer, int numSamples, void* userData)
                 break;
             }
         }
-        
-        if (!hasOutput) continue;
-        
+
+        if (!hasOutput)
+            continue;
+
         std::vector<float> tempBuffer(numSamples);
-        float* currentInput = buffer;
-        float* currentOutput = tempBuffer.data();
+        float *currentInput = buffer;
+        float *currentOutput = tempBuffer.data();
         bool needsSwap = false;
-        
-        for (const auto& module : rack.Modules)
+
+        for (const auto &module : rack.Modules)
         {
-            if (!module.Active) continue;
-                
+            if (!module.Active)
+                continue;
+
             switch (module.Type)
             {
-                case MODULE_VCO:
-                    break;
-                    
-                case MODULE_VCF:
-                    VCF::ProcessAudio(currentInput, currentOutput, numSamples, static_cast<int>(module.filterType));
-                    std::swap(currentInput, currentOutput);
-                    needsSwap = !needsSwap;
-                    break;
-                    
-                case MODULE_VCA:
-                    VCA::ProcessAudio(currentInput, currentOutput, numSamples);
-                    std::swap(currentInput, currentOutput);
-                    needsSwap = !needsSwap;
-                    break;
-                    
-                case MODULE_OUTPUT:
-                    Output::ProcessAudio(currentInput, numSamples);
-                    break;
+            case MODULE_VCO:
+                break;
+
+            case MODULE_LFO:
+                break;
+
+            case MODULE_VCF:
+                VCF::ProcessAudio(currentInput, currentOutput, numSamples, static_cast<int>(module.filterType));
+                std::swap(currentInput, currentOutput);
+                needsSwap = !needsSwap;
+                break;
+
+            case MODULE_VCA:
+                VCA::ProcessAudio(currentInput, currentOutput, numSamples);
+                std::swap(currentInput, currentOutput);
+                needsSwap = !needsSwap;
+                break;
+
+            case MODULE_OUTPUT:
+                Output::ProcessAudio(currentInput, numSamples);
+                break;
             }
         }
-        
+
         // Copy result back to buffer if needed
         if (needsSwap)
         {
             std::copy(currentInput, currentInput + numSamples, buffer);
         }
-        
+
         break;
     }
 }
 
 // --Function Prototypes--
-void DrawConnector(const ImVec2 &start, const ImVec2 &end);
-void DrawConnectors(const Rack &rack);
+
 
 // --Forward declarations for addon modules--
 namespace SpeedManipulation
@@ -190,6 +197,8 @@ const char *ModuleTypeToString(ModuleType type)
     {
     case MODULE_VCO:
         return "VCO";
+    case MODULE_LFO:
+        return "LFO";
     case MODULE_VCF:
         return "VCF";
     case MODULE_VCA:
@@ -219,10 +228,10 @@ const char *FilterTypeToString(FilterType type)
 }
 
 // --Audio Processing Through Rack--
-void ProcessRackAudio(Rack& rack, float* inputBuffer, int bufferSize)
+void ProcessRackAudio(Rack &rack, float *inputBuffer, int bufferSize)
 {
     bool hasOutput = false;
-    for (const auto& module : rack.Modules)
+    for (const auto &module : rack.Modules)
     {
         if (module.Type == MODULE_OUTPUT)
         {
@@ -230,41 +239,44 @@ void ProcessRackAudio(Rack& rack, float* inputBuffer, int bufferSize)
             break;
         }
     }
-    
+
     if (!hasOutput || !rack.Enabled)
         return;
 
     std::vector<float> buffer1(bufferSize);
     std::vector<float> buffer2(bufferSize);
-    
+
     std::copy(inputBuffer, inputBuffer + bufferSize, buffer1.begin());
-    
-    float* currentInput = buffer1.data();
-    float* currentOutput = buffer2.data();
-    
-    for (const auto& module : rack.Modules)
+
+    float *currentInput = buffer1.data();
+    float *currentOutput = buffer2.data();
+
+    for (const auto &module : rack.Modules)
     {
         if (!module.Active)
             continue;
-            
+
         switch (module.Type)
         {
-            case MODULE_VCO:
-                break;
-                
-            case MODULE_VCF:
-                VCF::ProcessAudio(currentInput, currentOutput, bufferSize, static_cast<int>(module.filterType));
-                std::swap(currentInput, currentOutput);
-                break;
-                
-            case MODULE_VCA:
-                VCA::ProcessAudio(currentInput, currentOutput, bufferSize);
-                std::swap(currentInput, currentOutput);
-                break;
-                
-            case MODULE_OUTPUT:
-                Output::ProcessAudio(currentInput, bufferSize);
-                break;
+        case MODULE_VCO:
+            break;
+
+        case MODULE_LFO:
+            break;
+
+        case MODULE_VCF:
+            VCF::ProcessAudio(currentInput, currentOutput, bufferSize, static_cast<int>(module.filterType));
+            std::swap(currentInput, currentOutput);
+            break;
+
+        case MODULE_VCA:
+            VCA::ProcessAudio(currentInput, currentOutput, bufferSize);
+            std::swap(currentInput, currentOutput);
+            break;
+
+        case MODULE_OUTPUT:
+            Output::ProcessAudio(currentInput, bufferSize);
+            break;
         }
     }
 }
@@ -336,8 +348,27 @@ int main()
 
                 if (ImGui::BeginPopup("AddModulePopup"))
                 {
-                    if (ImGui::MenuItem("VCO"))
-                        AddModuleToRack(rack, MODULE_VCO, "VCO-1");
+                    bool hasVCO = false;
+                    bool hasLFO = false;
+                    for (const auto &module : rack.Modules)
+                    {
+                        if (module.Type == MODULE_VCO)
+                            hasVCO = true;
+                        else if (module.Type == MODULE_LFO)
+                            hasLFO = true;
+                    }
+
+                    if (hasLFO || hasVCO)
+                    {
+                        ImGui::TextColored(ImVec4(1.0f, 0.5f, 0.0f, 1.0f), "Note: Only one VCO or LFO allowed per rack");
+                    }
+                    else 
+                    {
+                        if (!hasVCO && ImGui::MenuItem("VCO"))
+                            AddModuleToRack(rack, MODULE_VCO, "VCO-1");
+                        if (!hasLFO && ImGui::MenuItem("LFO"))
+                            AddModuleToRack(rack, MODULE_LFO, "LFO-1");
+                    }
                     if (ImGui::MenuItem("VCF"))
                         AddModuleToRack(rack, MODULE_VCF, "VCF-1");
                     if (ImGui::MenuItem("VCA"))
@@ -450,6 +481,12 @@ int main()
                     break;
                 }
 
+                case MODULE_LFO:
+                {
+                    LFO::MainImGui();
+                    break;
+                }
+
                 case MODULE_VCF:
                 {
                     ImGui::Text("VCF Controls:");
@@ -466,7 +503,7 @@ int main()
                 case MODULE_VCA:
                 {
                     VCA::MainImGui();
-                    
+
                     break;
                 }
 
@@ -491,19 +528,19 @@ int main()
             }
         }
 
-
         ImGuiUtil::End();
 
         Render();
-        
+
         // Process audio through each enabled rack
         std::vector<WaveForm> activeWaves;
-        for (auto& rack : Racks)
+        for (auto &rack : Racks)
         {
-            if (!rack.Enabled) continue;
-            
+            if (!rack.Enabled)
+                continue;
+
             bool hasOutput = false;
-            for (const auto& module : rack.Modules)
+            for (const auto &module : rack.Modules)
             {
                 if (module.Type == MODULE_OUTPUT && module.Active)
                 {
@@ -511,10 +548,10 @@ int main()
                     break;
                 }
             }
-            
+
             if (hasOutput)
             {
-                for (const auto& module : rack.Modules)
+                for (const auto &module : rack.Modules)
                 {
                     if (module.Type == MODULE_VCO && module.Active && module.vcoWave.Enabled)
                     {
@@ -523,7 +560,7 @@ int main()
                 }
             }
         }
-        
+
         // Send active waves to audio system
         Audio::SetWaveForms(activeWaves);
 
@@ -540,9 +577,9 @@ void MainWindow()
 
     Window::CreateWindow(1280, 720, "Signal Handler");
     Audio::Init();
-    
+
     Audio::SetFilterCallback(AudioFilterCallback, nullptr);
-    
+
     Window::PollEvents();
 }
 
@@ -556,31 +593,8 @@ void CleanUp()
 // --Rendering for ImGui and Window--
 void Render()
 {
-    Window::ClearColor(0.08f, 0.08f, 0.10f, 1.0f); // Darker background matching theme
+    Window::ClearColor(0.08f, 0.08f, 0.10f, 1.0f);
     ImGuiUtil::Render();
     Window::SwapBuffers();
     Window::PollEvents();
-}
-
-void ImGuiFuncGen()
-{
-    // VCO management is now integrated with Rack Manager
-    // No standalone VCO UI needed
-}
-
-void DrawConnectors(const Rack &rack)
-{
-    if (rack.Modules.size() < 2)
-        return;
-    
-    int moduleCount = 0;
-    for (auto moduleIt = rack.Modules.begin(); moduleIt != rack.Modules.end(); ++moduleIt)
-    {
-        if (std::next(moduleIt) != rack.Modules.end())
-        {
-            ImGui::Text("    ||");
-            ImGui::Text("    V");
-        }
-        moduleCount++;
-    }
 }
