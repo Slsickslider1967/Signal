@@ -4,6 +4,7 @@
 #include <GLFW/glfw3.h>
 #include "imgui.h"
 #include "implot.h"
+#include "imnodes.h"
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_opengl3.h"
 
@@ -102,7 +103,7 @@ namespace Window
             std::cout << "No Wayland or X11 display detected in environment" << std::endl;
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
-        ImPlot::CreateContext();
+        ImPlot::CreateContext();        ImNodes::CreateContext();        ImNodes::CreateContext();
         ImGuiIO& io = ImGui::GetIO(); (void)io;
 
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
@@ -136,6 +137,9 @@ namespace Window
         ImGui_ImplGlfw_Shutdown();
         ImPlot::DestroyContext();
         ImGui::DestroyContext();
+        ImNodes::DestroyContext();
+
+        std::cout << "ImGui shutdown successfully" << std::endl;
     }
 
     void ClearColor(float r, float g, float b, float a)

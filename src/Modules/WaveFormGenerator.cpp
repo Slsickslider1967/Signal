@@ -43,7 +43,6 @@ namespace WaveFormGen
         }
 
         ImGui::Spacing();
-        ImGui::Separator();
 
         ImGui::Text("TUNING");
         ImGui::SliderFloat("Coarse Frequency##tune", &wave.coarseTune, 20.0f, 2000.0f);

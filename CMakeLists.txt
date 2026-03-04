@@ -12,6 +12,14 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(implot)
 
+# Create an interface library for imgui to allow imnodes to link against it
+add_library(imgui_lib INTERFACE)
+target_include_directories(imgui_lib INTERFACE ${CMAKE_SOURCE_DIR}/external/imgui)
+
+# Add imnodes subdirectory with imgui target name defined
+set(IMNODES_IMGUI_TARGET_NAME imgui_lib)
+add_subdirectory(${CMAKE_SOURCE_DIR}/external/imnodes)
+
 add_executable(Signals
     src/Modules/Handler.cpp
     src/Modules/WaveFormGenerator.cpp
@@ -60,33 +68,9 @@ find_package(OpenGL REQUIRED)
 find_package(glfw3 REQUIRED)
 find_package(SDL2 REQUIRED)
 
-target_link_libraries(Signals PRIVATE glfw OpenGL::GL SDL2::SDL2 glad_gl_core_33)
-
+target_link_libraries(Signals PRIVATE glfw OpenGL::GL SDL2::SDL2 glad_gl_core_33 imnodes)
 # Ensure glad's generated headers/sources are produced before compiling Signals
 add_dependencies(Signals glad_gl_core_33)
 
 # Add the expected generated glad include directory so compiler sees it during build
 target_include_directories(Signals PRIVATE ${CMAKE_BINARY_DIR}/gladsources/glad_gl_core_33/include)
-
-# # Optional SoundTouch support: detect and link if available (no runtime integration yet)
-# find_package(PkgConfig)
-# if(PkgConfig_FOUND)
-#     pkg_check_modules(SOUNDTOUCH QUIET soundtouch)
-# endif()
-
-# if(SOUNDTOUCH_FOUND)
-#     message(STATUS "SoundTouch found via pkg-config")
-#     target_include_directories(Signals PRIVATE ${SOUNDTOUCH_INCLUDE_DIRS})
-#     target_link_libraries(Signals PRIVATE ${SOUNDTOUCH_LIBRARIES})
-# else()
-#     # fallback to manual search
-#     find_library(SOUNDTOUCH_LIB NAMES soundtouch libsoundtouch)
-#     find_path(SOUNDTOUCH_INCLUDE NAMES SoundTouch.h PATHS /usr/include /usr/local/include)
-#     if(SOUNDTOUCH_LIB AND SOUNDTOUCH_INCLUDE)
-#         message(STATUS "SoundTouch found via find_library/find_path")
-#         target_include_directories(Signals PRIVATE ${SOUNDTOUCH_INCLUDE})
-#         target_link_libraries(Signals PRIVATE ${SOUNDTOUCH_LIB})
-#     else()
-#         message(STATUS "SoundTouch not found; building without it")
-#     endif()
-# endif()

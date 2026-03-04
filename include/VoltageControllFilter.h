@@ -1,7 +1,16 @@
 #pragma once
 
+enum FilterType
+{
+    FILTER_LowPass,
+    FILTER_HighPass,
+    FILTER_BandPass,
+    FILTER_NOTCH
+};
+
 namespace VCF
 {
+    void DrawFilterTypeEditor(FilterType& filterType);
     void MainImGui();
     void ApplyLowPass(float *inputBuffer, float *outputBuffer, int bufferSize);
     void ApplyHighPass(float *inputBuffer, float *outputBuffer, int bufferSize);

@@ -1,5 +1,6 @@
 #include <iostream>
 #include "imgui.h"
+#include "imnodes.h"
 #include "implot.h"
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_opengl3.h"
@@ -56,7 +57,6 @@ namespace ImGuiUtil
         ImGui_ImplOpenGL3_NewFrame();
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
-        // Create a full-screen dockspace so other windows can dock
         static bool dockspaceOpen = true;
         ImGuiWindowFlags window_flags = ImGuiWindowFlags_MenuBar | ImGuiWindowFlags_NoDocking;
         ImGuiViewport* viewport = ImGui::GetMainViewport();

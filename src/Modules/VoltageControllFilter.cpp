@@ -38,17 +38,18 @@ namespace VCF
         hasFilteredScopeData.store(true, std::memory_order_release);
     }
 
-    // --Enum--
-    enum FilterType
-    {
-        LowPass,
-        HighPass,
-        BandPass,
-        Notch,
-        Variable
-    }; 
-
     // --Function--
+    void DrawFilterTypeEditor(FilterType& filterType)
+    {
+        ImGui::Text("VCF Controls:");
+        const char *filterTypes[] = {"Low-Pass", "High-Pass", "Band-Pass", "Notch"};
+        int currentFilterType = static_cast<int>(filterType);
+        if (ImGui::Combo("Filter Type", &currentFilterType, filterTypes, 4))
+        {
+            filterType = static_cast<FilterType>(currentFilterType);
+        }
+    }
+
     void MainImGui()
     {
         ImGui::SliderFloat("Cutoff Frequency", &cutoffFrequency, 20.0f, 20000.0f);

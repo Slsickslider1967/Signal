@@ -14,6 +14,7 @@ namespace Output
     // --Function--
     void MainImGui()
     {
+        ImGui::Text("Output Controls:");
         ImGui::SliderFloat("Volume", &outputLevel, 0.0f, 1.0f);
     }
 
