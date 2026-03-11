@@ -1,12 +1,15 @@
 #include "imgui.h"
+#include "imgui-knobs.h"
 #include <array>
 #include <atomic>
 #include <cmath>
 
 #include "../../include/Handler.h"
+#include "../../include/Module.h"
 #include "../../include/Voltage-ControlledAmplifier.h"
 #include "../../include/Functions/Audio.h"
 #include "../../include/Functions/ImGuiUtil.h"
+#include "../../include/Functions/CV.h"
 
 namespace VCA
 {
@@ -45,6 +48,7 @@ namespace VCA
     void EnvolopeShaping();
     void DynamicRangeControl();
 
+    void SetCVInput(float value);
     void Gain(float *buffer, int numSamples);
     void CV(float *buffer, int numSamples);
     void Envelope(float *buffer, int numSamples);
@@ -57,6 +61,8 @@ namespace VCA
     void MainImGui()
     {
         ImGui::Text("VCA Controls:");
+        ImGui::Separator();
+        
         AmpControl();
         EnvolopeShaping();
         DynamicRangeControl();
@@ -67,15 +73,75 @@ namespace VCA
         }
     }
 
+    void DrawModuleEditor(Module &module, bool &requestRemove)
+    {
+        baseGain = module.vcaConfig.baseGain;
+        cvAmount = module.vcaConfig.cvAmount;
+        cvInput = module.vcaConfig.cvInput;
+        attackTime = module.vcaConfig.attackTime;
+        releaseTime = module.vcaConfig.releaseTime;
+        envelopeState = module.vcaConfig.envelopeState;
+        envelopeActive = module.vcaConfig.envelopeActive;
+        useAttackandRelease = module.vcaConfig.useAttackandRelease;
+        rangeMin = module.vcaConfig.rangeMin;
+        rangeMax = module.vcaConfig.rangeMax;
+
+        ImGui::Text("Amplifier Module");
+        ImGui::Separator();
+
+        MainImGui();
+
+        module.vcaConfig.baseGain = baseGain;
+        module.vcaConfig.cvAmount = cvAmount;
+        module.vcaConfig.cvInput = cvInput;
+        module.vcaConfig.attackTime = attackTime;
+        module.vcaConfig.releaseTime = releaseTime;
+        module.vcaConfig.envelopeState = envelopeState;
+        module.vcaConfig.envelopeActive = envelopeActive;
+        module.vcaConfig.useAttackandRelease = useAttackandRelease;
+        module.vcaConfig.rangeMin = rangeMin;
+        module.vcaConfig.rangeMax = rangeMax;
+
+        if (ImGui::Button("Remove VCA Module", ImVec2(-1.0f, 0.0f)))
+        {
+            requestRemove = true;
+        }
+    }
+
     void AmpControl()
     {
-        ImGui::SliderFloat("Base Gain", &baseGain, 0.0f, 1.0f);
-        ImGui::SliderFloat("CV Amount", &cvAmount, 0.0f, 1.0f);
-        ImGui::SliderFloat("CV Input", &cvInput, 0.0f, 1.0f);
+        ImGui::Text("AMPLIFIER");
+        if (ImGui::BeginTable("VCA_AMP_ROW", 3, ImGuiTableFlags_SizingStretchSame))
+        {
+            ImGui::TableNextColumn();
+            ImGui::Text("GAIN");
+            ImGuiKnobs::Knob("##vca_gain", &baseGain, 0.0f, 1.0f, 0.01f, "%.2f", ImGuiKnobVariant_Wiper, 0.0f, ImGuiKnobFlags_NoTitle);
+
+            ImGui::TableNextColumn();
+            ImGui::Text("CV AMT");
+            ImGuiKnobs::Knob("##vca_cv_amt", &cvAmount, 0.0f, 1.0f, 0.01f, "%.2f", ImGuiKnobVariant_Wiper, 0.0f, ImGuiKnobFlags_NoTitle);
+
+            ImGui::TableNextColumn();
+            ImGui::Text("CV IN");
+            ImGuiKnobs::Knob("##vca_cv_in", &cvInput, 0.0f, 1.0f, 0.01f, "%.2f", ImGuiKnobVariant_Wiper, 0.0f, ImGuiKnobFlags_NoTitle);
+
+            ImGui::EndTable();
+        }
+        ImGui::Text("CV -> Gain depth and manual CV");
+        
+        // Show effective gain calculation
+        float effectiveGain = CV::ModulateParameter(
+            baseGain, cvInput, cvAmount,
+            {0.0f, 1.0f}, {0.0f, 1.0f},
+            CV::CVFunction::Linear
+        );
+        ImGui::TextColored(ImVec4(0.2f, 1.0f, 0.2f, 1.0f), 
+            "Effective Gain: %.3f", effectiveGain);
     }
 
     void EnvolopeShaping()
     {
+        ImGui::Text("ENVELOPE");
         if (ImGui::Checkbox("Use Attack/Release", &useAttackandRelease))
         {
             envelopeActive = false;
@@ -87,25 +153,52 @@ namespace VCA
             {
                 envelopeActive = true;
             }
-            ImGui::SliderFloat("Attack", &attackTime, 0.0f, 1000.0f, "%.1f ms");
-            ImGui::SliderFloat("Release", &releaseTime, 0.0f, 1000.0f, "%.1f ms");
+            if (ImGui::BeginTable("VCA_ENV_ROW", 2, ImGuiTableFlags_SizingStretchSame))
+            {
+                ImGui::TableNextColumn();
+                ImGui::Text("ATTACK");
+                ImGuiKnobs::Knob("##vca_attack", &attackTime, 0.0f, 1000.0f, 10.0f, "%.1f ms", ImGuiKnobVariant_Wiper, 0.0f, ImGuiKnobFlags_NoTitle);
+
+                ImGui::TableNextColumn();
+                ImGui::Text("RELEASE");
+                ImGuiKnobs::Knob("##vca_release", &releaseTime, 0.0f, 1000.0f, 10.0f, "%.1f ms", ImGuiKnobVariant_Wiper, 0.0f, ImGuiKnobFlags_NoTitle);
+
+                ImGui::EndTable();
+            }
         }
     }
 
     void DynamicRangeControl()
     {
-        ImGui::SliderFloat("Range Min", &rangeMin, 0.0f, 1.0f);
-        ImGui::SliderFloat("Range Max", &rangeMax, 0.0f, 1.0f);
+        ImGui::Text("RANGE");
+        if (ImGui::BeginTable("VCA_RANGE_ROW", 2, ImGuiTableFlags_SizingStretchSame))
+        {
+            ImGui::TableNextColumn();
+            ImGui::Text("MIN");
+            ImGuiKnobs::Knob("##vca_min", &rangeMin, 0.0f, 1.0f, 0.01f, "%.2f", ImGuiKnobVariant_Wiper, 0.0f, ImGuiKnobFlags_NoTitle);
+
+            ImGui::TableNextColumn();
+            ImGui::Text("MAX");
+            ImGuiKnobs::Knob("##vca_max", &rangeMax, 0.0f, 1.0f, 0.01f, "%.2f", ImGuiKnobVariant_Wiper, 0.0f, ImGuiKnobFlags_NoTitle);
+
+            ImGui::EndTable();
+        }
     }
 
-    // -Audio proscessing-
+    void SetCVInput(float value)
+    {
+        cvInput = CV::ClampCV(value, {0.0f, 1.0f});
+    }
     void Gain(float *buffer, int numSamples)
     {
-        float effectiveGain = baseGain * (1.0f + (cvInput - 0.5f) * 2.0f * cvAmount);
-        if (effectiveGain < 0.0f)
-            effectiveGain = 0.0f;
-        if (effectiveGain > 1.0f)
-            effectiveGain = 1.0f;
+        float effectiveGain = CV::ModulateParameter(
+            baseGain,
+            cvInput,
+            cvAmount,
+            {0.0f, 1.0f},
+            {0.0f, 1.0f},
+            CV::CVFunction::Linear
+        );
 
         for (int i = 0; i < numSamples; i++)
         {
@@ -115,7 +208,19 @@ namespace VCA
 
     void CV(float *buffer, int numSamples)
     {
-        
+        float modulation = CV::ModulateParameter(
+            0.5f,  
+            cvInput,
+            cvAmount,
+            {0.0f, 1.0f},
+            {0.0f, 1.0f},
+            CV::CVFunction::Linear
+        );
+
+        for (int i = 0; i < numSamples; i++)
+        {
+            buffer[i] *= modulation;
+        }
     }
 
     void Envelope(float *buffer, int numSamples)
@@ -189,7 +294,46 @@ namespace VCA
         Envelope(outputBuffer, numSamples);
         Response(outputBuffer, numSamples);
 
-        // Capture for oscilloscope display
+        CaptureScopeSamples(outputBuffer, numSamples);
+    }
+
+    void ProcessAudioWithCVBuffer(float *inputBuffer, float *outputBuffer, int numSamples, const float *cvBuffer, int cvBufferSize)
+    {
+        if (!inputBuffer || !outputBuffer || numSamples <= 0)
+            return;
+
+        // Store CV buffer info for UI display
+        static bool hasExternalCV = false;
+        hasExternalCV = (cvBuffer != nullptr && cvBufferSize > 0);
+
+        for (int i = 0; i < numSamples; i++)
+        {
+            float sampleCV = cvInput;
+            if (cvBuffer && i < cvBufferSize)
+            {
+                sampleCV = CV::ClampCV(cvBuffer[i], {0.0f, 1.0f});
+                
+                // Update the static CV input for UI display (use first sample)
+                if (i == 0)
+                {
+                    cvInput = sampleCV;
+                }
+            }
+
+            float effectiveGain = CV::ModulateParameter(
+                baseGain,
+                sampleCV,
+                cvAmount,
+                {0.0f, 1.0f},
+                {0.0f, 1.0f},
+                CV::CVFunction::Linear
+            );
+
+            outputBuffer[i] = inputBuffer[i] * effectiveGain;
+        }
+
+        Envelope(outputBuffer, numSamples);
+        Response(outputBuffer, numSamples);
         CaptureScopeSamples(outputBuffer, numSamples);
     }
 

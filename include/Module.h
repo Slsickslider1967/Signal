@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "WaveForm.h"
+#include "VoltageControllFilter.h"
 
 // -----VCO Module Config-----
 struct VCOConfig
@@ -58,10 +59,31 @@ struct Module
     int OutPins = 1;
     int InPins = 0;
 
-    Module() {}
-    
-    Module(ModuleType type) : Type(type) {
-        InPins = (type == MODULE_VCO) ? 0 : 1;
+    Module(ModuleType type = MODULE_VCO) : Type(type) {
+        if (type == MODULE_VCO) {
+            InPins = 4;   // V/Oct, FM CV, PWM CV, Sync
+            OutPins = 3;
+        }
+        else if (type == MODULE_LFO) {
+            InPins = 2;   // Rate CV, Reset/Sync
+            OutPins = 3;
+        }
+        else if (type == MODULE_VCF) {
+            InPins = 3;   // Audio In, Cutoff CV, Resonance CV
+            OutPins = 1;
+        }
+        else if (type == MODULE_VCA) {
+            InPins = 2;   // Audio In, CV/Envelope In
+            OutPins = 1;
+        }
+        else if (type == MODULE_OUTPUT) {
+            InPins = 1;   // Audio In
+            OutPins = 0;
+        }
+        else {
+            InPins = 1;
+            OutPins = 1;
+        }
     }
 
     VCOConfig vcoConfig;

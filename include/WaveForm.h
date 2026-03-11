@@ -1,6 +1,8 @@
 #pragma once
 
 #include <list>
+#include <map>
+#include <vector>
 
 // VCO Waveform Types
 enum WaveType
@@ -58,11 +60,22 @@ void GetWaveFormData(WaveForm& wave, float* buffer, int bufferSize, int startSam
 float NormalizedToVoltage(float normalized, WaveForm::VoltageRange range);
 float VoltageToNormalized(float voltage, WaveForm::VoltageRange range);
 
+struct Module;
+struct Link;
+
 namespace WaveFormGen
 {
     extern std::list<WaveForm> WaveForms;
     void MainImgui();
+    void DrawModuleEditor(Module &module, bool &requestRemove);
     void DrawWaveFormEditor(WaveForm& wave);
+    void InitializeVCOWaveForm(WaveForm& wave, int moduleID);
+
+    std::map<int, std::vector<float>> GenerateLFOOutputs(std::list<Module>& modules, int numSamples);
+    std::map<int, std::vector<float>> BuildNormalizedCVInputs(
+        const std::list<Module>& modules,
+        const std::vector<Link>& links,
+        const std::map<int, std::vector<float>>& lfoOutputs);
 }
 
 // --Module Type Definitions--
@@ -81,4 +94,6 @@ struct Link
     int ID;
     int StartModuleID;
     int EndModuleID;
+    int StartPinIndex = 0;
+    int EndPinIndex = 0;
 };

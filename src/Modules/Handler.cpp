@@ -2,6 +2,7 @@
 #include <list>
 #include <thread>
 #include <chrono>
+#include <map>
 #include "imgui.h"
 #include "imnodes.h"
 #include <vector>
@@ -19,6 +20,7 @@
 #include "../../include/Voltage-ControlledAmplifier.h"
 #include "../../include/LowFrequencyOscillator.h"
 #include "../../include/Module.h"
+#include "../../include/ModuleEditor.h"
 
 // --Rack Structure--
 struct Rack
@@ -78,6 +80,9 @@ void AudioFilterCallback(float *buffer, int numSamples, void *userData)
         float *currentOutput = tempBuffer.data();
         bool needsSwap = false;
 
+        auto lfoOutputs = WaveFormGen::GenerateLFOOutputs(rack.Modules, numSamples);
+        auto normalizedCVInputs = WaveFormGen::BuildNormalizedCVInputs(rack.Modules, rack.Links, lfoOutputs);
+
         for (auto &module : rack.Modules)
         {
             if (!module.Active)
@@ -85,34 +90,43 @@ void AudioFilterCallback(float *buffer, int numSamples, void *userData)
 
             switch (module.Type)
             {
-            case MODULE_VCO:
-                break;
+                case MODULE_VCO:
+                    break;
 
-            case MODULE_LFO:
-                LFO::ProcessAudio(module.lfoConfig.waveform, currentInput, currentOutput, numSamples);
-                std::swap(currentInput, currentOutput);
-                needsSwap = !needsSwap;
-                break;
+                case MODULE_LFO:
+                    break;
 
-            case MODULE_VCF:
-                VCF::ProcessAudio(currentInput, currentOutput, numSamples, static_cast<int>(module.vcfConfig.filterType));
-                std::swap(currentInput, currentOutput);
-                needsSwap = !needsSwap;
-                break;
+                case MODULE_VCF:
+                    VCF::ProcessAudio(currentInput, currentOutput, numSamples, static_cast<int>(module.vcfConfig.filterType));
+                    std::swap(currentInput, currentOutput);
+                    needsSwap = !needsSwap;
+                    break;
 
-            case MODULE_VCA:
-                VCA::ProcessAudio(currentInput, currentOutput, numSamples);
-                std::swap(currentInput, currentOutput);
-                needsSwap = !needsSwap;
-                break;
+                case MODULE_VCA:
+                    {
+                        const float *externalCVBuffer = nullptr;
+                        int externalCVBufferSize = 0;
 
-            case MODULE_OUTPUT:
-                Output::ProcessAudio(currentInput, numSamples);
-                break;
+                        auto cvIt = normalizedCVInputs.find(module.ID);
+                        if (cvIt != normalizedCVInputs.end())
+                        {
+                            externalCVBuffer = cvIt->second.data();
+                            externalCVBufferSize = static_cast<int>(cvIt->second.size());
+                        }
+
+                        VCA::SetCVInput(module.vcaConfig.cvInput);
+                        VCA::ProcessAudioWithCVBuffer(currentInput, currentOutput, numSamples, externalCVBuffer, externalCVBufferSize);
+                    }
+                    std::swap(currentInput, currentOutput);
+                    needsSwap = !needsSwap;
+                    break;
+
+                case MODULE_OUTPUT:
+                    Output::ProcessAudio(currentInput, numSamples);
+                    break;
             }
         }
 
-        // Copy result back to buffer if needed
         if (needsSwap)
         {
             std::copy(currentInput, currentInput + numSamples, buffer);
@@ -147,45 +161,18 @@ void DeleteRack(int rackID)
 
 void AddModuleToRack(Rack &rack, ModuleType type, const std::string &name)
 {
-    Module module;
+    Module module(type);
     module.ID = NextModuleID++;
-    module.Type = type;
     module.Name = name;
     module.Active = true;
 
     if (type == MODULE_VCO)
     {
-        module.vcoConfig.waveform.WaveID = module.ID;
-        module.vcoConfig.waveform.Enabled = true;
-        module.vcoConfig.waveform.OpenWindow = true;
-        module.vcoConfig.waveform.RequestDockBelow = true;
-        module.vcoConfig.waveform.Type = Sine;
-        module.vcoConfig.waveform.coarseTune = 440.0f;
-        module.vcoConfig.waveform.Amplitude = 0.8f;
-        module.vcoConfig.waveform.SampleRate = 44100;
-        module.vcoConfig.waveform.vOctCV = 0.5f;
-        module.vcoConfig.waveform.linearFMCV = 0.5f;
-        module.vcoConfig.waveform.pwmCV = 0.5f;
-        module.vcoConfig.waveform.vRange = WaveForm::Bipolar10V;
-        module.vcoConfig.waveform.fmDepth = 0.0f;
+        WaveFormGen::InitializeVCOWaveForm(module.vcoConfig.waveform, module.ID);
     }
     else if (type == MODULE_LFO)
     {
-        module.lfoConfig.waveform.WaveID = module.ID;
-        module.lfoConfig.waveform.Enabled = true;
-        module.lfoConfig.waveform.OpenWindow = true;
-        module.lfoConfig.waveform.RequestDockBelow = true;
-        module.lfoConfig.waveform.Type = Sine;
-        module.lfoConfig.waveform.coarseTune = 1.0f;
-        module.lfoConfig.waveform.fineTune = 0.0f;
-        module.lfoConfig.waveform.Amplitude = 0.5f;
-        module.lfoConfig.waveform.SampleRate = 44100;
-        module.lfoConfig.waveform.Phase = 0.0;
-        module.lfoConfig.waveform.vOctCV = 0.5f;
-        module.lfoConfig.waveform.linearFMCV = 0.5f;
-        module.lfoConfig.waveform.pwmCV = 0.5f;
-        module.lfoConfig.waveform.vRange = WaveForm::Bipolar10V;
-        module.lfoConfig.waveform.fmDepth = 0.0f;
+        LFO::InitializeLFOWaveForm(module.lfoConfig.waveform, module.ID);
     }
 
     rack.Modules.push_back(module);
@@ -351,7 +338,6 @@ int main()
 
         Render();
 
-        // Process audio through each enabled rack
         std::vector<WaveForm> activeWaves;
         for (auto &rack : Racks)
         {
@@ -386,11 +372,30 @@ int main()
             if (!outputIsLinked)
                 continue;
 
-            for (const auto &module : rack.Modules)
+            const int numSamplesForCV = 1; 
+            auto lfoOutputs = WaveFormGen::GenerateLFOOutputs(rack.Modules, numSamplesForCV);
+            auto normalizedCVInputs = WaveFormGen::BuildNormalizedCVInputs(rack.Modules, rack.Links, lfoOutputs);
+
+            for (auto &module : rack.Modules)
             {
                 if (module.Type == MODULE_VCO && module.Active && module.vcoConfig.waveform.Enabled)
                 {
-                    activeWaves.push_back(module.vcoConfig.waveform);
+                    WaveForm wave = module.vcoConfig.waveform;
+                    
+                    auto cvIt = normalizedCVInputs.find(module.ID);
+                    if (cvIt != normalizedCVInputs.end() && !cvIt->second.empty())
+                    {
+                        float cvValue = cvIt->second[0];
+                        
+                        wave.vOctCV = cvValue;
+                        
+                        if (wave.fmDepth > 0.0f)
+                        {
+                            wave.linearFMCV = cvValue;
+                        }
+                    }
+                    
+                    activeWaves.push_back(wave);
                 }
             }
         }
@@ -463,8 +468,15 @@ void CreateLinks(Rack &rack)
     {
         int startModuleID = startAttr / 1000;
         int endModuleID = endAttr / 1000;
+        
+        int startPin = startAttr % 1000;
+        int endPin = endAttr % 1000;
 
-        if ((startAttr % 1000 == 1) && (endAttr % 1000 == 0))
+        // Output pins: remainder < 100, Input pins: remainder >= 100
+        bool isStartOutput = (startPin < 100);
+        bool isEndInput = (endPin >= 100);
+
+        if (isStartOutput && isEndInput)
         {
             bool linkExists = false;
             for (const auto &link : rack.Links)
@@ -482,6 +494,8 @@ void CreateLinks(Rack &rack)
                 newLink.ID = NextLinkID++;
                 newLink.StartModuleID = startModuleID;
                 newLink.EndModuleID = endModuleID;
+                newLink.StartPinIndex = startPin;
+                newLink.EndPinIndex = endPin - 100;
                 rack.Links.push_back(newLink);
             }
         }
@@ -492,7 +506,8 @@ void DrawLinks(Rack &rack)
 {
     for (const auto &link : rack.Links)
     {
-        ImNodes::Link(link.ID, link.StartModuleID * 1000 + 1, link.EndModuleID * 1000);
+        ImNodes::Link(link.ID, link.StartModuleID * 1000 + link.StartPinIndex, 
+                      link.EndModuleID * 1000 + 100 + link.EndPinIndex);
     }
 }
 
@@ -520,6 +535,20 @@ void DrawChildNodeWindow()
     ImGui::EndChild();
 }
 
+void RemoveNode(int nodeID)
+{
+    for (auto &rack : Racks)
+    {
+        RemoveModuleFromRack(rack, nodeID);
+        
+        rack.Links.erase(
+            std::remove_if(rack.Links.begin(), rack.Links.end(),
+                           [nodeID](const Link &l)
+                           { return l.StartModuleID == nodeID || l.EndModuleID == nodeID; }),
+            rack.Links.end());
+    }
+}
+
 void DrawModuleDetails()
 {
     Module *selectedModule = nullptr;
@@ -540,97 +569,26 @@ void DrawModuleDetails()
     if (selectedModule)
     {
         bool windowOpen = true;
-        std::string windowTitle = "Edit: " + std::string(ModuleTypeToString(selectedModule->Type)) + " #" + std::to_string(selectedModule->ID);
-        ImGui::Begin(windowTitle.c_str(), &windowOpen, ImGuiWindowFlags_AlwaysAutoResize);
+        bool requestRemove = false;
+        bool drewWindow = DrawModuleEditorWindow(*selectedModule, windowOpen, requestRemove);
 
-        char moduleNameBuffer[128];
-        strncpy(moduleNameBuffer, selectedModule->Name.c_str(), sizeof(moduleNameBuffer));
-        if (ImGui::InputText("Name", moduleNameBuffer, sizeof(moduleNameBuffer)))
+        if (requestRemove)
         {
-            selectedModule->Name = moduleNameBuffer;
+            RemoveNode(selectedModule->ID);
+            SelectedModuleID = -1;
+            return;
         }
 
-        if (ImGui::Button("Add InPin"))
+        if (!windowOpen)
         {
-            selectedModule->InPins++;
+            SelectedModuleID = -1;
+            return;
         }
 
-        ImGui::SameLine();
-
-        if (ImGui::Button("Remove InPin"))
-        {
-            if (selectedModule->InPins > 1)
-            {
-                selectedModule->InPins--;
-            }
-        }
-
-        if (ImGui::Button("Add OutPin"))
-        {
-            selectedModule->OutPins++;
-        }
-        if (ImGui::Button("Remove OutPin"))
-        {
-            if (selectedModule->OutPins > 1)
-            {
-                selectedModule->OutPins--;
-            }
-        }
-
-        ImGui::Checkbox("Active", &selectedModule->Active);
-
-        ImGui::Separator();
-
-        switch (selectedModule->Type)
-        {
-        case MODULE_VCO:
-        {
-            ImGui::PushID(selectedModule->ID);
-            WaveFormGen::DrawWaveFormEditor(selectedModule->vcoConfig.waveform);
-            ImGui::PopID();
-            break;
-        }
-
-        case MODULE_LFO:
-        {
-            ImGui::PushID(selectedModule->ID);
-            LFO::DrawLFOEditor(selectedModule->lfoConfig.waveform);
-            ImGui::PopID();
-            break;
-        }
-
-        case MODULE_VCF:
-        {
-            ImGui::PushID(selectedModule->ID);
-            VCF::DrawFilterTypeEditor(selectedModule->vcfConfig.filterType);
-            VCF::MainImGui();
-            ImGui::PopID();
-            break;
-        }
-
-        case MODULE_VCA:
-        {
-            ImGui::PushID(selectedModule->ID);
-            VCA::MainImGui();
-            ImGui::PopID();
-            break;
-        }
-
-        case MODULE_OUTPUT:
-        {
-            ImGui::PushID(selectedModule->ID);
-            Output::MainImGui();
-            ImGui::PopID();
-            break;
-        }
-        }
-
-        if (ImGui::Button("Close") || !windowOpen)
+        if (!drewWindow)
         {
             SelectedModuleID = -1;
         }
-
-        ImGui::End();
     }
     else
     {

@@ -1,5 +1,7 @@
 #pragma once
 
+struct Module;
+
 enum FilterType
 {
     FILTER_LowPass,
@@ -12,6 +14,7 @@ namespace VCF
 {
     void DrawFilterTypeEditor(FilterType& filterType);
     void MainImGui();
+    void DrawModuleEditor(Module &module, bool &requestRemove);
     void ApplyLowPass(float *inputBuffer, float *outputBuffer, int bufferSize);
     void ApplyHighPass(float *inputBuffer, float *outputBuffer, int bufferSize);
     void ApplyBandPass(float *inputBuffer, float *outputBuffer, int bufferSize);

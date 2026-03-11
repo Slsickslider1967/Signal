@@ -4,7 +4,9 @@
 #include <cmath>
 
 #include "imgui.h"
+#include "imgui-knobs.h"
 #include "../../include/Functions/ImGuiUtil.h"
+#include "../../include/Module.h"
 #include "../../include/LowFrequencyOscillator.h"
 #include "../../include/Functions/Audio.h"
 
@@ -20,6 +22,31 @@ namespace LFO
     void ProcessAudio(WaveForm& lfoWave, float *inputBuffer, float *outputBuffer, int numSamples);
 
     // --functions--
+    void InitializeLFOWaveForm(WaveForm& lfo)
+    {
+        lfo.WaveID = 0;
+        lfo.Enabled = true;
+        lfo.OpenWindow = true;
+        lfo.RequestDockBelow = true;
+        lfo.Type = Sine;
+        lfo.coarseTune = 1.0f;
+        lfo.fineTune = 0.0f;
+        lfo.Amplitude = 0.5f;
+        lfo.SampleRate = 44100;
+        lfo.Phase = 0.0;
+        lfo.vOctCV = 0.5f;
+        lfo.linearFMCV = 0.5f;
+        lfo.pwmCV = 0.5f;
+        lfo.vRange = WaveForm::Bipolar10V;
+        lfo.fmDepth = 0.0f;
+    }
+
+    void InitializeLFOWaveForm(WaveForm& lfo, int moduleID)
+    {
+        InitializeLFOWaveForm(lfo);
+        lfo.WaveID = moduleID;
+    }
+
     void MainImGui()
     {
         if (LFOs.empty())
@@ -44,19 +71,44 @@ namespace LFO
         }
     }
 
+    void DrawModuleEditor(Module &module, bool &requestRemove)
+    {
+        ImGui::Text("LFO Module");
+        ImGui::Separator();
+
+        DrawLFOEditor(module.lfoConfig.waveform);
+
+        if (ImGui::Button("Remove LFO Module", ImVec2(-1.0f, 0.0f)))
+        {
+            requestRemove = true;
+        }
+    }
+
     void DrawLFOEditor(WaveForm& lfo)
     {
         ImGui::Text("LFO ID: %d", lfo.WaveID);
         ImGui::Separator();
 
-        // Low Frequency Control
-        ImGui::SliderFloat("Frequency##lfo", &lfo.coarseTune, 0.1f, 20.0f);
-        ImGui::SliderFloat("Fine Tune##lfo", &lfo.fineTune, -5.0f, 5.0f);
-        ImGui::SliderFloat("Amplitude##lfo", &lfo.Amplitude, 0.0f, 1.0f);
+        ImGui::Text("RATE");
+        if (ImGui::BeginTable("LFO_RATE_ROW", 3, ImGuiTableFlags_SizingStretchSame))
+        {
+            ImGui::TableNextColumn();
+            ImGui::Text("FREQ");
+            ImGuiKnobs::Knob("##lfo_freq", &lfo.coarseTune, 0.1f, 20.0f, 0.01f, "%.2f Hz", ImGuiKnobVariant_Wiper, 0.0f, ImGuiKnobFlags_NoTitle);
+
+            ImGui::TableNextColumn();
+            ImGui::Text("FINE");
+            ImGuiKnobs::Knob("##lfo_fine", &lfo.fineTune, -5.0f, 5.0f, 0.01f, "%.2f", ImGuiKnobVariant_Wiper, 0.0f, ImGuiKnobFlags_NoTitle);
+
+            ImGui::TableNextColumn();
+            ImGui::Text("LEVEL");
+            ImGuiKnobs::Knob("##lfo_amp", &lfo.Amplitude, 0.0f, 1.0f, 0.01f, "%.2f", ImGuiKnobVariant_Wiper, 0.0f, ImGuiKnobFlags_NoTitle);
+
+            ImGui::EndTable();
+        }
         ImGui::Spacing();
 
-        // WaveFrom Selection
-        ImGui::Text("WAVEFORM");
+        ImGui::Text("WAVE SHAPE");
         const char *waveNames[] = {"Sine", "Square", "Sawtooth", "Triangle", "Pulse", "Noise"};
         WaveType waveVals[] = {Sine, Square, Sawtooth, Triangle, Pulse, Noise};
 
@@ -82,11 +134,11 @@ namespace LFO
         if (lfo.Type == Pulse)
         {
             ImGui::Text("Pulse Width");
-            ImGui::SliderFloat("PWM##lfo", &lfo.pwmCV, 0.05f, 0.95f);
+            ImGuiKnobs::Knob("##lfo_pwm", &lfo.pwmCV, 0.05f, 0.95f, 0.01f, "%.2f", ImGuiKnobVariant_WiperDot, 0.0f, ImGuiKnobFlags_NoTitle);
             ImGui::Spacing();
         }
 
-        ImGui::Text("Output Controls");
+        ImGui::Text("MODULE");
         ImGui::Checkbox("Enabled##lfo", &lfo.Enabled);
         ImGui::Spacing();
 

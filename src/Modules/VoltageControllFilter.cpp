@@ -3,15 +3,21 @@
 #include <array>
 #include <atomic>
 #include "imgui.h"
+#include "imgui-knobs.h"
 #include "../../include/Functions/ImGuiUtil.h"
+#include "../../include/Module.h"
 #include "../../include/WaveForm.h"
 #include "../../include/VoltageControllFilter.h"
+#include "../../include/Functions/CV.h"
 
 
 namespace VCF
 {
     // --Variables--
     static float cutoffFrequency = 1000.0f; // Hz
+    static float baseCutoff = 1000.0f; // Base cutoff before CV modulation
+    static float cutoffCVInput = 0.5f; // CV input (0..1)
+    static float cutoffCVAmount = 0.0f; // CV modulation depth
     static float resonance = 0.5f;
     static float previousOutputSample = 0.0f;
     static const float sampleRateHz = 44100.0f;
@@ -52,8 +58,38 @@ namespace VCF
 
     void MainImGui()
     {
-        ImGui::SliderFloat("Cutoff Frequency", &cutoffFrequency, 20.0f, 20000.0f);
-        ImGui::SliderFloat("Resonance", &resonance, 0.0f, 1.0f);
+        ImGui::Text("CUTOFF");
+        if (ImGui::BeginTable("VCF_CUTOFF_ROW", 3, ImGuiTableFlags_SizingStretchSame))
+        {
+            ImGui::TableNextColumn();
+            ImGui::Text("BASE");
+            ImGuiKnobs::Knob("##vcf_base", &baseCutoff, 20.0f, 20000.0f, 20.0f, "%.1f Hz", ImGuiKnobVariant_WiperDot, 0.0f, ImGuiKnobFlags_Logarithmic | ImGuiKnobFlags_NoTitle);
+
+            ImGui::TableNextColumn();
+            ImGui::Text("CV IN");
+            ImGuiKnobs::Knob("##vcf_cv_in", &cutoffCVInput, 0.0f, 1.0f, 0.01f, "%.2f", ImGuiKnobVariant_Wiper, 0.0f, ImGuiKnobFlags_NoTitle);
+
+            ImGui::TableNextColumn();
+            ImGui::Text("CV AMT");
+            ImGuiKnobs::Knob("##vcf_cv_amt", &cutoffCVAmount, 0.0f, 1.0f, 0.01f, "%.2f", ImGuiKnobVariant_Wiper, 0.0f, ImGuiKnobFlags_NoTitle);
+
+            ImGui::EndTable();
+        }
+        
+        // Apply CV modulation with exponential curve for natural frequency response
+        cutoffFrequency = CV::ModulateParameter(
+            CV::NormalizeCV(baseCutoff, {20.0f, 20000.0f}),
+            cutoffCVInput,
+            cutoffCVAmount,
+            {0.0f, 1.0f},
+            {0.0f, 1.0f},
+            CV::CVFunction::Exponential
+        );
+        cutoffFrequency = CV::DenormalizeCV(cutoffFrequency, {20.0f, 20000.0f});
+        
+        ImGui::Text("Effective Cutoff: %.1f Hz", cutoffFrequency);
+        ImGui::Text("RESONANCE");
+        ImGuiKnobs::Knob("##vcf_res", &resonance, 0.0f, 1.0f, 0.01f, "%.2f", ImGuiKnobVariant_Wiper, 0.0f, ImGuiKnobFlags_NoTitle);
 
         if (hasFilteredScopeData.load(std::memory_order_acquire))
         {
@@ -71,6 +107,20 @@ namespace VCF
             static float emptyOscilloscope[256] = {0.0f};
             ImGui::Text("No filtered signal yet");
             ImGuiUtil::PlotSignal(emptyOscilloscope, 256, "VCF Output Display");
+        }
+    }
+
+    void DrawModuleEditor(Module &module, bool &requestRemove)
+    {
+        ImGui::Text("Filter Module");
+        ImGui::Separator();
+
+        DrawFilterTypeEditor(module.vcfConfig.filterType);
+        MainImGui();
+
+        if (ImGui::Button("Remove VCF Module", ImVec2(-1.0f, 0.0f)))
+        {
+            requestRemove = true;
         }
     }
 

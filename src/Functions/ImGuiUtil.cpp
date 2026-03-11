@@ -36,6 +36,40 @@ namespace ImGuiUtil
         }
     }
 
+    static void RenderDualSignalPlot(const float *redSamples, const float *blueSamples, int sampleCount, const char *label, float minY, float maxY)
+    {
+        if (!redSamples || !blueSamples || sampleCount <= 0)
+        {
+            return;
+        }
+
+        ImVec2 plotSize = ImVec2(-1.0f, 170.0f);
+        ImPlotFlags plotFlags = ImPlotFlags_NoMenus |
+                                ImPlotFlags_NoBoxSelect |
+                                ImPlotFlags_NoMouseText;
+        ImPlotAxisFlags axisFlags = ImPlotAxisFlags_NoDecorations |
+                                    ImPlotAxisFlags_Lock;
+
+        if (ImPlot::BeginPlot(label, plotSize, plotFlags))
+        {
+            ImPlot::SetupAxes(nullptr, nullptr, axisFlags, axisFlags);
+            ImPlot::SetupAxisLimits(ImAxis_X1, 0.0, static_cast<double>(sampleCount), ImGuiCond_Always);
+            ImPlot::SetupAxisLimits(ImAxis_Y1, static_cast<double>(minY), static_cast<double>(maxY), ImGuiCond_Always);
+
+            ImPlotSpec blueSpec;
+            blueSpec.LineColor = ImVec4(0.20f, 0.55f, 0.95f, 1.0f);
+            blueSpec.LineWeight = 1.7f;
+            ImPlot::PlotLine("Reference (Blue)", blueSamples, sampleCount, 1.0, 0.0, blueSpec);
+
+            ImPlotSpec redSpec;
+            redSpec.LineColor = ImVec4(0.92f, 0.18f, 0.20f, 1.0f);
+            redSpec.LineWeight = 1.7f;
+            ImPlot::PlotLine("Output (Red)", redSamples, sampleCount, 1.0, 0.0, redSpec);
+
+            ImPlot::EndPlot();
+        }
+    }
+
     void Render()
     {
         ImGui::Render();
@@ -91,11 +125,23 @@ namespace ImGuiUtil
 
         int displaySamples = std::min(wave.SampleRate, 2048);
 
+        WaveForm referenceWave = wave;
+        referenceWave.vOctCV = 0.5f;
+        referenceWave.linearFMCV = 0.5f;
+        referenceWave.fmDepth = 0.0f;
+
+        std::vector<float> referenceBuffer(displaySamples);
+        GetWaveFormData(referenceWave, referenceBuffer.data(), displaySamples, wave.displayOffset);
+
         std::vector<float> displayBuffer(displaySamples);
         GetWaveFormData(wave, displayBuffer.data(), displaySamples, wave.displayOffset);
-        RenderSignalPlot(displayBuffer.data(), displaySamples, label, -1.05f, 1.05f);
+        RenderDualSignalPlot(displayBuffer.data(), referenceBuffer.data(), displaySamples, label, -1.05f, 1.05f);
 
-        // Advance display offset so waveform scrolls. Use fixed frame step matching ~16ms.
+        ImGui::TextColored(ImVec4(0.20f, 0.55f, 0.95f, 1.0f), "Blue = reference");
+        ImGui::SameLine();
+        ImGui::TextColored(ImVec4(0.92f, 0.18f, 0.20f, 1.0f), "Red = output");
+
+        // Advance display offset so waveform scrolls. ~16ms.
         int displayAdvanceSamples = std::max(1, static_cast<int>(wave.SampleRate * 0.016f));
         int displayWrapLength = std::max(1, wave.SampleRate * 1000);
         wave.displayOffset = (wave.displayOffset + displayAdvanceSamples) % displayWrapLength;
