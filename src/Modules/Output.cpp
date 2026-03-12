@@ -2,7 +2,7 @@
 #include "imgui.h"
 #include "imgui-knobs.h"
 #include "../../include/Functions/ImGuiUtil.h"
-#include "../../include/Module.h"
+#include "../../include/Functions/Module.h"
 #include "../../include/Output.h"
 #include "../../include/Functions/Audio.h"
 

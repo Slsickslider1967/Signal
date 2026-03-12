@@ -5,7 +5,7 @@
 #include "imgui.h"
 #include "imgui-knobs.h"
 #include "../../include/Functions/ImGuiUtil.h"
-#include "../../include/Module.h"
+#include "../../include/Functions/Module.h"
 #include "../../include/WaveForm.h"
 #include "../../include/VoltageControllFilter.h"
 #include "../../include/Functions/CV.h"

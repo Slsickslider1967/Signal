@@ -4,6 +4,7 @@
 #include <chrono>
 #include <map>
 #include "imgui.h"
+#include "imgui_stdlib.h"
 #include "imnodes.h"
 #include <vector>
 #include <string>
@@ -13,13 +14,13 @@
 // --Local headers--
 #include "../../include/Functions/Window.h"
 #include "../../include/Functions/Audio.h"
+#include "../../include/Functions/Module.h"
 #include "../../include/Functions/ImGuiUtil.h"
 #include "../../include/Output.h"
 #include "../../include/VoltageControllFilter.h"
 #include "../../include/WaveForm.h"
 #include "../../include/Voltage-ControlledAmplifier.h"
 #include "../../include/LowFrequencyOscillator.h"
-#include "../../include/Module.h"
 #include "../../include/ModuleEditor.h"
 
 // --Rack Structure--
@@ -38,103 +39,7 @@ static int NextModuleID = 1;
 static int NextLinkID = 1;
 std::list<Rack> Racks;
 static int SelectedModuleID = -1;
-
-// --Audio Processing Callback--
-void AudioFilterCallback(float *buffer, int numSamples, void *userData)
-{
-    for (auto &rack : Racks)
-    {
-        if (!rack.Enabled)
-            continue;
-
-        int outputModuleID = -1;
-        bool hasOutput = false;
-        for (const auto &module : rack.Modules)
-        {
-            if (module.Type == MODULE_OUTPUT && module.Active)
-            {
-                hasOutput = true;
-                outputModuleID = module.ID;
-                break;
-            }
-        }
-
-        if (!hasOutput)
-            continue;
-
-        bool outputIsLinked = false;
-        for (const auto &link : rack.Links)
-        {
-            if (link.EndModuleID == outputModuleID)
-            {
-                outputIsLinked = true;
-                break;
-            }
-        }
-
-        if (!outputIsLinked)
-            continue;
-
-        std::vector<float> tempBuffer(numSamples);
-        float *currentInput = buffer;
-        float *currentOutput = tempBuffer.data();
-        bool needsSwap = false;
-
-        auto lfoOutputs = WaveFormGen::GenerateLFOOutputs(rack.Modules, numSamples);
-        auto normalizedCVInputs = WaveFormGen::BuildNormalizedCVInputs(rack.Modules, rack.Links, lfoOutputs);
-
-        for (auto &module : rack.Modules)
-        {
-            if (!module.Active)
-                continue;
-
-            switch (module.Type)
-            {
-                case MODULE_VCO:
-                    break;
-
-                case MODULE_LFO:
-                    break;
-
-                case MODULE_VCF:
-                    VCF::ProcessAudio(currentInput, currentOutput, numSamples, static_cast<int>(module.vcfConfig.filterType));
-                    std::swap(currentInput, currentOutput);
-                    needsSwap = !needsSwap;
-                    break;
-
-                case MODULE_VCA:
-                    {
-                        const float *externalCVBuffer = nullptr;
-                        int externalCVBufferSize = 0;
-
-                        auto cvIt = normalizedCVInputs.find(module.ID);
-                        if (cvIt != normalizedCVInputs.end())
-                        {
-                            externalCVBuffer = cvIt->second.data();
-                            externalCVBufferSize = static_cast<int>(cvIt->second.size());
-                        }
-
-                        VCA::SetCVInput(module.vcaConfig.cvInput);
-                        VCA::ProcessAudioWithCVBuffer(currentInput, currentOutput, numSamples, externalCVBuffer, externalCVBufferSize);
-                    }
-                    std::swap(currentInput, currentOutput);
-                    needsSwap = !needsSwap;
-                    break;
-
-                case MODULE_OUTPUT:
-                    Output::ProcessAudio(currentInput, numSamples);
-                    break;
-            }
-        }
-
-        if (needsSwap)
-        {
-            std::copy(currentInput, currentInput + numSamples, buffer);
-        }
-
-        break;
-    }
-}
+static int SelectedRackID = -1;
 
 // --Forward declarations for addon modules--
 namespace SpeedManipulation
@@ -234,6 +139,15 @@ void AddPins(const Module &module);
 
 void ChildNodeWindow();
 void DrawModuleDetails();
+void PopUpTool(Rack &rack);
+void AudioFilterCallback(float *buffer, int numSamples, void *userData);
+void SetupAudioHandling();
+void ShutdownAudioHandling();
+void UpdateAudioWaveFormsFromRacks();
+
+void AddRackTool();
+void PopUpTool();
+Rack *FindRackByID(int rackID);
 
 int main()
 {
@@ -247,24 +161,115 @@ int main()
         if (showDemoWindow)
             ImGui::ShowDemoWindow(&showDemoWindow);
 
-        ImGui::Begin("Rack Manager");
-
-        if (ImGui::Button("Add Rack"))
+        if (ImGui::BeginMainMenuBar())
         {
-            CreateRack(std::string("Rack ") + std::to_string(NextRackID));
+            if (ImGui::BeginMenu("Rack"))
+            {
+                if (ImGui::MenuItem("Add Rack"))
+                {
+                     CreateRack(std::string("Rack ") + std::to_string(NextRackID));
+                }
+                if (ImGui::BeginMenu("Remove Rack"))
+                {
+                    if (Racks.empty())
+                    {
+                        ImGui::TextDisabled("No racks to remove");
+                    }
+                    else
+                    {
+                        int rackIDToDelete = -1;
+                        for (const auto &rack : Racks)
+                        {
+                            std::string label = "Rack #" + std::to_string(rack.ID) + ": " + rack.Name;
+                            if (ImGui::MenuItem(label.c_str()))
+                                rackIDToDelete = rack.ID;
+                        }
+                        if (rackIDToDelete != -1)
+                            DeleteRack(rackIDToDelete);
+                    }
+                    ImGui::EndMenu();
+                }
+                ImGui::Separator();
+
+                if (ImGui::BeginMenu("Save rack"))
+                {
+                    ImGui::Text("Save functionality not implemented yet");
+                    for (const auto &rack : Racks)
+                    {
+                        std::string label = "Save " + rack.Name;
+                    }
+                    ImGui::EndMenu();
+                }
+
+
+                ImGui::EndMenu();
+            }
+            if (ImGui::BeginMenu("Modules"))
+            {
+                if (ImGui::BeginMenu("Add module to selected rack"))
+                {
+                    Rack *selectedRack = FindRackByID(SelectedRackID);
+                    if (selectedRack == nullptr)
+                    {
+                        ImGui::TextDisabled("Select a rack first");
+                    }
+                    else
+                    {
+                        if (ImGui::MenuItem("VCO"))
+                            AddModuleToRack(*selectedRack, MODULE_VCO, "VCO-1");
+                        if (ImGui::MenuItem("LFO"))
+                            AddModuleToRack(*selectedRack, MODULE_LFO, "LFO-1");
+                        if (ImGui::MenuItem("VCF"))
+                            AddModuleToRack(*selectedRack, MODULE_VCF, "VCF-1");
+                        if (ImGui::MenuItem("VCA"))
+                            AddModuleToRack(*selectedRack, MODULE_VCA, "VCA-1");
+                        if (ImGui::MenuItem("Output"))
+                            AddModuleToRack(*selectedRack, MODULE_OUTPUT, "Output");
+                    }
+
+                    ImGui::EndMenu();   
+                }
+
+                ImGui::EndMenu();
+            }
+
+            ImGui::EndMainMenuBar();
         }
 
-        ImGui::Separator();
 
+
+        ImGuiViewport *mainViewport = ImGui::GetMainViewport();
+        ImGui::SetNextWindowPos(mainViewport->WorkPos);
+        ImGui::SetNextWindowSize(mainViewport->WorkSize);
+        ImGui::SetNextWindowViewport(mainViewport->ID);
+
+        ImGuiWindowFlags rackManagerFlags = 
+                                            ImGuiWindowFlags_NoDocking |
+                                            ImGuiWindowFlags_NoMove |
+                                            ImGuiWindowFlags_NoResize |
+                                            ImGuiWindowFlags_NoCollapse |
+                                            ImGuiWindowFlags_NoSavedSettings |
+                                            ImGuiWindowFlags_NoBringToFrontOnFocus |
+                                            ImGuiWindowFlags_NoTitleBar |
+                                            ImGuiWindowFlags_NoNavFocus;
+
+        ImGui::SetNextWindowCollapsed(false, ImGuiCond_Always);
+        ImGui::SetNextWindowBgAlpha(1.0f);
+        ImGui::Begin("Rack Manager", nullptr, rackManagerFlags);
+        
         // Display all racks
         for (auto rackIt = Racks.begin(); rackIt != Racks.end();)
         {
             Rack &rack = *rackIt;
             ImGui::PushID(rack.ID);
 
-            std::string rackHeaderLabel = "Rack #" + std::to_string(rack.ID) + ": " + rack.Name;
+            std::string rackHeaderLabel = "Rack #" + std::to_string(rack.ID) + ": " + rack.Name + "###RackHeader" + std::to_string(rack.ID);
 
             bool rackOpen = ImGui::TreeNodeEx(rackHeaderLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
+            if (ImGui::IsItemClicked())
+            {
+                SelectedRackID = rack.ID;
+            }
 
             ImGui::SameLine();
             ImGui::SetCursorPosY(ImGui::GetCursorPosY() - 4.0f);
@@ -289,35 +294,10 @@ int main()
 
             if (rackOpen)
             {
-                ImGui::Indent();
-
-                std::string addButtonLabel = "Add Module##" + std::to_string(rack.ID);
-                if (ImGui::Button(addButtonLabel.c_str()))
-                {
-                    ImGui::OpenPopup("AddModulePopup");
-                }
-
-                if (ImGui::BeginPopup("AddModulePopup"))
-                {
-
-                    if (ImGui::MenuItem("VCO"))
-                        AddModuleToRack(rack, MODULE_VCO, "VCO-1");
-                    if (ImGui::MenuItem("LFO"))
-                        AddModuleToRack(rack, MODULE_LFO, "LFO-1");
-                    if (ImGui::MenuItem("VCF"))
-                        AddModuleToRack(rack, MODULE_VCF, "VCF-1");
-                    if (ImGui::MenuItem("VCA"))
-                        AddModuleToRack(rack, MODULE_VCA, "VCA-1");
-                    if (ImGui::MenuItem("Output"))
-                        AddModuleToRack(rack, MODULE_OUTPUT, "Output");
-                    ImGui::EndPopup();
-                }
-
-                ImGui::Separator();
-
                 ImGui::Text("Signal Chain - Node Editor:");
 
                 DrawRackEditor(rack);
+                PopUpTool(rack);
 
                 ImGui::Unindent();
                 ImGui::TreePop();
@@ -338,69 +318,7 @@ int main()
 
         Render();
 
-        std::vector<WaveForm> activeWaves;
-        for (auto &rack : Racks)
-        {
-            if (!rack.Enabled)
-                continue;
-
-            int outputModuleID = -1;
-            bool hasOutput = false;
-            for (const auto &module : rack.Modules)
-            {
-                if (module.Type == MODULE_OUTPUT && module.Active)
-                {
-                    hasOutput = true;
-                    outputModuleID = module.ID;
-                    break;
-                }
-            }
-
-            if (!hasOutput)
-                continue;
-
-            bool outputIsLinked = false;
-            for (const auto &link : rack.Links)
-            {
-                if (link.EndModuleID == outputModuleID)
-                {
-                    outputIsLinked = true;
-                    break;
-                }
-            }
-
-            if (!outputIsLinked)
-                continue;
-
-            const int numSamplesForCV = 1; 
-            auto lfoOutputs = WaveFormGen::GenerateLFOOutputs(rack.Modules, numSamplesForCV);
-            auto normalizedCVInputs = WaveFormGen::BuildNormalizedCVInputs(rack.Modules, rack.Links, lfoOutputs);
-
-            for (auto &module : rack.Modules)
-            {
-                if (module.Type == MODULE_VCO && module.Active && module.vcoConfig.waveform.Enabled)
-                {
-                    WaveForm wave = module.vcoConfig.waveform;
-                    
-                    auto cvIt = normalizedCVInputs.find(module.ID);
-                    if (cvIt != normalizedCVInputs.end() && !cvIt->second.empty())
-                    {
-                        float cvValue = cvIt->second[0];
-                        
-                        wave.vOctCV = cvValue;
-                        
-                        if (wave.fmDepth > 0.0f)
-                        {
-                            wave.linearFMCV = cvValue;
-                        }
-                    }
-                    
-                    activeWaves.push_back(wave);
-                }
-            }
-        }
-
-        Audio::SetWaveForms(activeWaves);
+        UpdateAudioWaveFormsFromRacks();
 
         std::this_thread::sleep_for(std::chrono::milliseconds(16));
     }
@@ -409,9 +327,20 @@ int main()
     return 0;
 }
 
+
+// --Draw--
+
+
 void DrawRackEditor(Rack &rack)
 {
     ImNodes::BeginNodeEditor();
+    if (ImNodes::IsEditorHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
+    {
+        SelectedRackID = rack.ID;
+        SelectedModuleID = -1;
+    }
+    bool openContextMenu = ImNodes::IsEditorHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right);
+
     int nodeIndex = 0;
 
     for (auto moduleIt = rack.Modules.begin(); moduleIt != rack.Modules.end();)
@@ -446,6 +375,9 @@ void DrawRackEditor(Rack &rack)
     DrawLinks(rack);
     ImNodes::EndNodeEditor();
 
+    if (openContextMenu)
+        ImGui::OpenPopup("RackContextMenu");
+
     CreateLinks(rack);
 
     {
@@ -459,6 +391,7 @@ void DrawRackEditor(Rack &rack)
                 rack.Links.end());
         }
     }
+
 }
 
 void CreateLinks(Rack &rack)
@@ -596,30 +529,269 @@ void DrawModuleDetails()
     }
 }
 
+// --Draw Handling--
+
+
+
 void MainWindow()
 {
     setenv("PREFER_X11", "1", 1);
 
     Window::CreateWindow(1280, 720, "Signal Handler");
-    Audio::Init();
-
-    Audio::SetFilterCallback(AudioFilterCallback, nullptr);
+    SetupAudioHandling();
 
     Window::PollEvents();
 }
 
-// --Memory Cleanup--
 void CleanUp()
 {
     Window::DestroyWindow();
-    Audio::Close();
+    ShutdownAudioHandling();
 }
 
-// --Rendering for ImGui and Window--
 void Render()
 {
     Window::ClearColor(0.08f, 0.08f, 0.10f, 1.0f);
     ImGuiUtil::Render();
     Window::SwapBuffers();
     Window::PollEvents();
+}
+
+
+// --Audio Handling--
+
+
+
+void SetupAudioHandling()
+{
+    Audio::Init();
+    Audio::SetFilterCallback(AudioFilterCallback, nullptr);
+}
+
+void UpdateAudioWaveFormsFromRacks()
+{
+    std::vector<WaveForm> activeWaves;
+    for (auto &rack : Racks)
+    {
+        if (!rack.Enabled)
+            continue;
+
+        int outputModuleID = -1;
+        bool hasOutput = false;
+        for (const auto &module : rack.Modules)
+        {
+            if (module.Type == MODULE_OUTPUT && module.Active)
+            {
+                hasOutput = true;
+                outputModuleID = module.ID;
+                break;
+            }
+        }
+
+        if (!hasOutput)
+            continue;
+
+        bool outputIsLinked = false;
+        for (const auto &link : rack.Links)
+        {
+            if (link.EndModuleID == outputModuleID)
+            {
+                outputIsLinked = true;
+                break;
+            }
+        }
+
+        if (!outputIsLinked)
+            continue;
+
+        const int numSamplesForCV = 1;
+        auto lfoOutputs = WaveFormGen::GenerateLFOOutputs(rack.Modules, numSamplesForCV);
+        auto normalizedCVInputs = WaveFormGen::BuildNormalizedCVInputs(rack.Modules, rack.Links, lfoOutputs);
+
+        for (auto &module : rack.Modules)
+        {
+            if (module.Type == MODULE_VCO && module.Active && module.vcoConfig.waveform.Enabled)
+            {
+                WaveForm wave = module.vcoConfig.waveform;
+
+                auto cvIt = normalizedCVInputs.find(module.ID);
+                if (cvIt != normalizedCVInputs.end() && !cvIt->second.empty())
+                {
+                    float cvValue = cvIt->second[0];
+
+                    wave.vOctCV = cvValue;
+
+                    if (wave.fmDepth > 0.0f)
+                    {
+                        wave.linearFMCV = cvValue;
+                    }
+                }
+
+                activeWaves.push_back(wave);
+            }
+        }
+    }
+
+    Audio::SetWaveForms(activeWaves);
+}
+
+void AudioFilterCallback(float *buffer, int numSamples, void *userData)
+{
+    for (auto &rack : Racks)
+    {
+        if (!rack.Enabled)
+            continue;
+
+        int outputModuleID = -1;
+        bool hasOutput = false;
+        for (const auto &module : rack.Modules)
+        {
+            if (module.Type == MODULE_OUTPUT && module.Active)
+            {
+                hasOutput = true;
+                outputModuleID = module.ID;
+                break;
+            }
+        }
+
+        if (!hasOutput)
+            continue;
+
+        bool outputIsLinked = false;
+        for (const auto &link : rack.Links)
+        {
+            if (link.EndModuleID == outputModuleID)
+            {
+                outputIsLinked = true;
+                break;
+            }
+        }
+
+        if (!outputIsLinked)
+            continue;
+
+        std::vector<float> tempBuffer(numSamples);
+        float *currentInput = buffer;
+        float *currentOutput = tempBuffer.data();
+        bool needsSwap = false;
+
+        auto lfoOutputs = WaveFormGen::GenerateLFOOutputs(rack.Modules, numSamples);
+        auto normalizedCVInputs = WaveFormGen::BuildNormalizedCVInputs(rack.Modules, rack.Links, lfoOutputs);
+
+        for (auto &module : rack.Modules)
+        {
+            if (!module.Active)
+                continue;
+
+            switch (module.Type)
+            {
+                case MODULE_VCO:
+                    break;
+
+                case MODULE_LFO:
+                    break;
+
+                case MODULE_VCF:
+                    VCF::ProcessAudio(currentInput, currentOutput, numSamples, static_cast<int>(module.vcfConfig.filterType));
+                    std::swap(currentInput, currentOutput);
+                    needsSwap = !needsSwap;
+                    break;
+
+                case MODULE_VCA:
+                    {
+                        const float *externalCVBuffer = nullptr;
+                        int externalCVBufferSize = 0;
+
+                        auto cvIt = normalizedCVInputs.find(module.ID);
+                        if (cvIt != normalizedCVInputs.end())
+                        {
+                            externalCVBuffer = cvIt->second.data();
+                            externalCVBufferSize = static_cast<int>(cvIt->second.size());
+                        }
+
+                        VCA::SetCVInput(module.vcaConfig.cvInput);
+                        VCA::ProcessAudioWithCVBuffer(currentInput, currentOutput, numSamples, externalCVBuffer, externalCVBufferSize);
+                    }
+                    std::swap(currentInput, currentOutput);
+                    needsSwap = !needsSwap;
+                    break;
+
+                case MODULE_OUTPUT:
+                    Output::ProcessAudio(currentInput, numSamples);
+                    break;
+            }
+        }
+
+        if (needsSwap)
+        {
+            std::copy(currentInput, currentInput + numSamples, buffer);
+        }
+
+        break;
+    }
+}
+
+void ShutdownAudioHandling()
+{
+    Audio::Close();
+}
+
+
+// --Tools--
+
+
+void AddRackTool()
+{
+    CreateRack(std::string("Rack ") + std::to_string(NextRackID));
+}
+
+void PopUpTool(Rack &rack)
+{
+    if (ImGui::BeginPopupModal("RackContextMenu"))
+    {
+        if (ImGui::InputText("Rack Name", &rack.Name, ImGuiInputTextFlags_EnterReturnsTrue))
+        {
+            ImGui::CloseCurrentPopup();
+        }
+
+        ImGui::Separator();
+
+        if (ImGui::MenuItem("Add VCO"))
+            AddModuleToRack(rack, MODULE_VCO, "VCO-1");
+        if (ImGui::MenuItem("Add LFO"))
+            AddModuleToRack(rack, MODULE_LFO, "LFO-1");
+        if (ImGui::MenuItem("Add VCF"))
+            AddModuleToRack(rack, MODULE_VCF, "VCF-1");
+        if (ImGui::MenuItem("Add VCA"))
+            AddModuleToRack(rack, MODULE_VCA, "VCA-1");
+        if (ImGui::MenuItem("Add Output"))
+            AddModuleToRack(rack, MODULE_OUTPUT, "Output-1");
+
+        ImGui::Separator();
+
+        if (ImGui::MenuItem("Remove Rack"))
+        {
+            int rackIDToDelete = rack.ID;
+            DeleteRack(rackIDToDelete);
+            ImGui::CloseCurrentPopup();
+            return;
+        }
+
+        if (ImGui::IsKeyPressed(ImGuiKey_Escape))
+        {
+            ImGui::CloseCurrentPopup();
+        }
+        ImGui::EndPopup();
+    }
+}
+
+Rack *FindRackByID(int rackID)
+{
+    for (auto &rack : Racks)
+    {
+        if (rack.ID == rackID)
+            return &rack;
+    }
+
+    return nullptr;
 }

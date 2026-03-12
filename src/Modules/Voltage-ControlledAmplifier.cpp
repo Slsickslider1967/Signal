@@ -5,7 +5,7 @@
 #include <cmath>
 
 #include "../../include/Handler.h"
-#include "../../include/Module.h"
+#include "../../include/Functions/Module.h"
 #include "../../include/Voltage-ControlledAmplifier.h"
 #include "../../include/Functions/Audio.h"
 #include "../../include/Functions/ImGuiUtil.h"

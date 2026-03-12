@@ -3,7 +3,7 @@
 #include <cstring>
 #include <string>
 
-#include "../../include/Module.h"
+#include "../../include/Functions/Module.h"
 #include "../../include/ModuleEditor.h"
 #include "../../include/WaveForm.h"
 #include "../../include/LowFrequencyOscillator.h"
