@@ -113,8 +113,8 @@ target_link_libraries(imgui_knobs_lib PUBLIC imgui)
 # ---------- Application target ----------
 
 add_executable(Signals
-	src/Modules/Handler.cpp
-		src/Modules/ModuleEditor.cpp
+	src/Handler.cpp
+	src/Modules/ModuleEditor.cpp
 	src/Modules/WaveFormGenerator.cpp
 	src/Modules/Output.cpp
 	src/Functions/Window.cpp

@@ -3,6 +3,7 @@
 #include <thread>
 #include <chrono>
 #include <map>
+
 #include "imgui.h"
 #include "imgui_stdlib.h"
 #include "imnodes.h"
@@ -12,16 +13,16 @@
 #include <cstdio>
 
 // --Local headers--
-#include "../../include/Functions/Window.h"
-#include "../../include/Functions/Audio.h"
-#include "../../include/Functions/Module.h"
-#include "../../include/Functions/ImGuiUtil.h"
-#include "../../include/Output.h"
-#include "../../include/VoltageControllFilter.h"
-#include "../../include/WaveForm.h"
-#include "../../include/Voltage-ControlledAmplifier.h"
-#include "../../include/LowFrequencyOscillator.h"
-#include "../../include/ModuleEditor.h"
+#include "../include/Functions/Window.h"
+#include "../include/Functions/Audio.h"
+#include "../include/Functions/Module.h"
+#include "../include/Functions/ImGuiUtil.h"
+#include "../include/Output.h"
+#include "../include/VoltageControllFilter.h"
+#include "../include/WaveForm.h"
+#include "../include/Voltage-ControlledAmplifier.h"
+#include "../include/LowFrequencyOscillator.h"
+#include "../include/ModuleEditor.h"
 
 // --Rack Structure--
 struct Rack
@@ -139,7 +140,7 @@ void AddPins(const Module &module);
 
 void ChildNodeWindow();
 void DrawModuleDetails();
-void PopUpTool(Rack &rack);
+bool PopUpTool(Rack &rack);
 void AudioFilterCallback(float *buffer, int numSamples, void *userData);
 void SetupAudioHandling();
 void ShutdownAudioHandling();
@@ -191,7 +192,7 @@ int main()
                 }
                 ImGui::Separator();
 
-                if (ImGui::BeginMenu("Save rack"))
+                if (ImGui::BeginMenu("Save Rack"))
                 {
                     ImGui::Text("Save functionality not implemented yet");
                     for (const auto &rack : Racks)
@@ -206,12 +207,12 @@ int main()
             }
             if (ImGui::BeginMenu("Modules"))
             {
-                if (ImGui::BeginMenu("Add module to selected rack"))
+                if (ImGui::BeginMenu("Add Module to Selected Rack"))
                 {
                     Rack *selectedRack = FindRackByID(SelectedRackID);
                     if (selectedRack == nullptr)
                     {
-                        ImGui::TextDisabled("Select a rack first");
+                        ImGui::TextDisabled("Select a Rack First");
                     }
                     else
                     {
@@ -228,6 +229,17 @@ int main()
                     }
 
                     ImGui::EndMenu();   
+                }
+
+                ImGui::Separator();
+
+                if (ImGui::MenuItem("Import Module From File"))
+                {
+                    ImGui::Text("Import functionality not implemented yet");
+                }
+                if (ImGui::MenuItem("Select Module File Directory"))
+                {
+                    ImGui::Text("Directory selection not implemented yet");
                 }
 
                 ImGui::EndMenu();
@@ -297,7 +309,18 @@ int main()
                 ImGui::Text("Signal Chain - Node Editor:");
 
                 DrawRackEditor(rack);
-                PopUpTool(rack);
+                bool deleteRequested = PopUpTool(rack);
+
+                if (deleteRequested)
+                {
+                    ImGui::TreePop();
+                    int rackIDToDelete = rack.ID;
+                    auto nextRackIt = std::next(rackIt);
+                    DeleteRack(rackIDToDelete);
+                    rackIt = nextRackIt;
+                    ImGui::PopID();
+                    continue;
+                }
 
                 ImGui::Unindent();
                 ImGui::TreePop();
@@ -745,8 +768,9 @@ void AddRackTool()
     CreateRack(std::string("Rack ") + std::to_string(NextRackID));
 }
 
-void PopUpTool(Rack &rack)
+bool PopUpTool(Rack &rack)
 {
+    bool requestDelete = false;
     if (ImGui::BeginPopupModal("RackContextMenu"))
     {
         if (ImGui::InputText("Rack Name", &rack.Name, ImGuiInputTextFlags_EnterReturnsTrue))
@@ -756,33 +780,33 @@ void PopUpTool(Rack &rack)
 
         ImGui::Separator();
 
-        if (ImGui::MenuItem("Add VCO"))
+        if (ImGui::Selectable("Add VCO", false, ImGuiSelectableFlags_DontClosePopups))
             AddModuleToRack(rack, MODULE_VCO, "VCO-1");
-        if (ImGui::MenuItem("Add LFO"))
+        if (ImGui::Selectable("Add LFO", false, ImGuiSelectableFlags_DontClosePopups))
             AddModuleToRack(rack, MODULE_LFO, "LFO-1");
-        if (ImGui::MenuItem("Add VCF"))
+        if (ImGui::Selectable("Add VCF", false, ImGuiSelectableFlags_DontClosePopups))
             AddModuleToRack(rack, MODULE_VCF, "VCF-1");
-        if (ImGui::MenuItem("Add VCA"))
+        if (ImGui::Selectable("Add VCA", false, ImGuiSelectableFlags_DontClosePopups))
             AddModuleToRack(rack, MODULE_VCA, "VCA-1");
-        if (ImGui::MenuItem("Add Output"))
+        if (ImGui::Selectable("Add Output", false, ImGuiSelectableFlags_DontClosePopups))
             AddModuleToRack(rack, MODULE_OUTPUT, "Output-1");
 
         ImGui::Separator();
 
-        if (ImGui::MenuItem("Remove Rack"))
+        if (ImGui::Selectable("Remove Rack"))
         {
-            int rackIDToDelete = rack.ID;
-            DeleteRack(rackIDToDelete);
+            requestDelete = true;
             ImGui::CloseCurrentPopup();
-            return;
         }
 
         if (ImGui::IsKeyPressed(ImGuiKey_Escape))
         {
             ImGui::CloseCurrentPopup();
         }
+
         ImGui::EndPopup();
     }
+    return requestDelete;
 }
 
 Rack *FindRackByID(int rackID)
