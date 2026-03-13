@@ -79,6 +79,7 @@ namespace MDU
     using GetMetaDataFn = const MetaData* (*)();
 }
 
+// As C defines \ to designate end of line
 #define MDU_REGISTER(ModuleClass) \
 extern "C" MDU::Module* mdu_create() \
 { \
@@ -94,4 +95,5 @@ extern "C" const MDU::MetaData* mdu_get_metadata() \
 { \
     static MDU::MetaData metadata = ModuleClass::BuildMetadata(); \
     return &metadata; \
-}
+} \
+\
