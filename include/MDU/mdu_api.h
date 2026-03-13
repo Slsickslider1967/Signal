@@ -85,15 +85,12 @@ extern "C" MDU::Module* mdu_create() \
 { \
     return new ModuleClass(); \
 } \
-\
 extern "C" void mdu_destroy(MDU::Module* module) \
 { \
     delete module; \
 } \
-\
 extern "C" const MDU::MetaData* mdu_get_metadata() \
 { \
     static MDU::MetaData metadata = ModuleClass::BuildMetadata(); \
     return &metadata; \
-} \
-\
+}

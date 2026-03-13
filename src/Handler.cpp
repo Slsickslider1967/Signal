@@ -23,6 +23,8 @@
 #include "../include/Voltage-ControlledAmplifier.h"
 #include "../include/LowFrequencyOscillator.h"
 #include "../include/ModuleEditor.h"
+#include "../include/MDU/ModuleLoader.h"
+#include "../include/MDU/mduParser.h"
 
 // --Rack Structure--
 struct Rack
@@ -149,6 +151,9 @@ void UpdateAudioWaveFormsFromRacks();
 void AddRackTool();
 void PopUpTool();
 Rack *FindRackByID(int rackID);
+
+// mdu prototypes
+void ProcessMDUModule(const MDU::BufferView& bufferView, MDU::Module* module);
 
 int main()
 {
@@ -818,4 +823,29 @@ Rack *FindRackByID(int rackID)
     }
 
     return nullptr;
+}
+
+
+// --mdu handling--
+void ProcessMDUModule(const MDU::BufferView& bufferView, MDU::Module* module)
+{
+    MDU::FileWatcher watcher;
+    watcher.SetWatchPaths({"src/Modules", "modules"});
+    watcher.PrimeSnapshot();
+
+    // each frame or every N milliseconds
+    for (const auto& change : watcher.PollChanges())
+    {
+        if (change.Type == MDU::FileChangeType::Added ||
+            change.Type == MDU::FileChangeType::Modified)
+        {
+            std::string error;
+            loader.LoadFromMduFile(change.Path, &error);
+        }
+        else if (change.Type == MDU::FileChangeType::Removed)
+        {
+            std::string error;
+            loader.UnloadByPath(change.Path, &error);
+        }
+    }
 }

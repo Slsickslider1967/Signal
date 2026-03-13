@@ -1,4 +1,4 @@
-#include "../../include/Tools/mduParser.h"
+#include "MDU/mduParser.h"
 
 #include <algorithm>
 #include <cctype>
@@ -131,7 +131,7 @@ namespace
 namespace MDU
 {
     // Case sensitive mapping to ParameterType
-    ParameterType ParamTypeFromString(const std::string& text)
+    ParameterType ParameterTypeFromString(const std::string& text)
     {
         std::string Str = text;
         std::transform(Str.begin(), Str.end(), Str.begin(), [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
@@ -165,7 +165,7 @@ namespace MDU
         std::ifstream file(filePath);
         if (!file.is_open())
         {
-            return ParseResult{false, {}, "Failed to open .mdu file:"};
+            return ParseResult{false, {}, "[MDP000] Failed to open .mdu file: " + filePath};
         }
 
         std::stringstream buffer;
@@ -177,15 +177,21 @@ namespace MDU
     ParseResult ParseMDUText(const std::string& SourceText)
     {
         const std::string BeginTag = "/*! Module";
+        const std::string BeginTagUpper = "/*! MODULE";
         const std::string EndTag = "*/";
 
-        const auto BeginPosition = SourceText.find(BeginTag);
+        auto BeginPosition = SourceText.find(BeginTag);
+        if (BeginPosition == std::string::npos)
+        {
+            BeginPosition = SourceText.find(BeginTagUpper);
+        }
+
         if (BeginPosition == std::string::npos)        
-            return ParseResult{false, {}, "MDU header not found: ERROR 001"};
+            return ParseResult{false, {}, "[MDP001] MDU header not found. Expected '/*! Module' or '/*! MODULE'."};
         
         const auto EndPosition = SourceText.find(EndTag, BeginPosition + BeginTag.size());
         if (EndPosition == std::string::npos)
-            return ParseResult{false, {}, "MDU header end not found: ERROR 002"};
+            return ParseResult{false, {}, "[MDP002] MDU header end not found. Expected '*/'."};
 
         std::string HeaderContent = SourceText.substr(BeginPosition + BeginTag.size(), EndPosition - (BeginPosition + BeginTag.size()));
         std::stringstream stream(HeaderContent);
@@ -208,6 +214,11 @@ namespace MDU
         {
             ++LineNumber;
             std::string Text = Trim(Line);
+
+            if (Text.empty())
+            {
+                continue;
+            }
 
             if (Text == "Input Pins:" || Text == "Inputs")
             {
@@ -236,20 +247,20 @@ namespace MDU
 
                 if (CurrentSection == Section::InputPins || CurrentSection == Section::OutputPins)
                 {
-                    auto RENAME = ParseInlineObject(TextContent);
+                    auto pinFields = ParseInlineObject(TextContent);
 
                     PinDefinition Pin; 
-                    auto PinID = RENAME.find("id");
-                    auto PinLabel = RENAME.find("label");
+                    auto PinID = pinFields.find("id");
+                    auto PinLabel = pinFields.find("label");
 
                     // Check for a PinID in the line.
-                    if (PinID == RENAME.end())
+                    if (PinID == pinFields.end())
                     {
-                        return {false, {}, "Pin is missing an ID in the header line " + std::to_string(LineNumber) + ": ERROR 003 "};
+                        return {false, {}, "[MDP003] Pin is missing an id at header line " + std::to_string(LineNumber)};
                     }
 
                     Pin.ID = PinID -> second;
-                    Pin.label = (PinLabel != RENAME.end()) ? PinLabel->second : Pin.ID;
+                    Pin.label = (PinLabel != pinFields.end()) ? PinLabel->second : Pin.ID;
 
                     // Add the pin to the appropriate section.
                     if (CurrentSection == Section::InputPins)
@@ -263,7 +274,13 @@ namespace MDU
 
             if (CurrentSection == Section::Parameters)
             {
-                auto ParsedInLineObject = ParseInlineObject(Text);
+                std::string paramText = StartsWith(Text, "-") ? Trim(Text.substr(1)) : Text;
+                auto ParsedInLineObject = ParseInlineObject(paramText);
+
+                if (ParsedInLineObject.empty())
+                {
+                    continue;
+                }
 
                 ParameterDefinition Parameter;
                 auto ParamID = ParsedInLineObject.find("id");
@@ -276,28 +293,28 @@ namespace MDU
                 // Error for missing ID
                 if (ParamID == ParsedInLineObject.end())
                 {
-                    return {false, {}, "Parameter is missing an ID in the header line " + std::to_string(LineNumber) + ": ERROR 004"};
+                    return {false, {}, "[MDP004] Parameter is missing an id at header line " + std::to_string(LineNumber)};
                 }
 
 
                 Parameter.ID = ParamID->second;
                 Parameter.label = (ParamLabel != ParsedInLineObject.end()) ? ParamLabel->second : Parameter.ID;
-                Parameter.type = (ParamType != ParsedInLineObject.end()) ? ParamTypeFromString(ParamType->second) : ParameterType::Knob;
+                Parameter.type = (ParamType != ParsedInLineObject.end()) ? ParameterTypeFromString(ParamType->second) : ParameterType::Knob;
 
                 // Errors for invalid min, max, default values (if they exist)
                 if (ParamMin != ParsedInLineObject.end() && !ToFloat(ParamMin->second, Parameter.minValue))
                 {
-                    return {false, {}, "Invalid min value for parameter '" + Parameter.ID + "' in line " + std::to_string(LineNumber) + ": ERROR 005"};
+                    return {false, {}, "[MDP005] Invalid min value for parameter '" + Parameter.ID + "' at line " + std::to_string(LineNumber)};
                 }
 
                 if (ParamMax != ParsedInLineObject.end() && !ToFloat(ParamMax->second, Parameter.maxValue))
                 {
-                    return {false, {}, "Invalid max value for parameter '" + Parameter.ID + "' in line " + std::to_string(LineNumber) + ": ERROR 006"};
+                    return {false, {}, "[MDP006] Invalid max value for parameter '" + Parameter.ID + "' at line " + std::to_string(LineNumber)};
                 }
 
                 if (ParamDefault != ParsedInLineObject.end() && !ToFloat(ParamDefault->second, Parameter.defaultValue))
                 {
-                    return {false, {}, "Invalid default value for parameter '" + Parameter.ID + "' in line " + std::to_string(LineNumber) + ": ERROR 007"};
+                    return {false, {}, "[MDP007] Invalid default value for parameter '" + Parameter.ID + "' at line " + std::to_string(LineNumber)};
                 }
 
                 // Handle options for combo and stepped types
@@ -308,7 +325,6 @@ namespace MDU
                     if (!OptionsStr.empty() && OptionsStr.front() == '[' && OptionsStr.back() == ']')
                     {
                         OptionsStr = OptionsStr.substr(1, OptionsStr.size() - 2);
-                        Parameter.options = SplitCommaRespectQuotes(OptionsStr);
 
                         auto OptionParts = SplitCommaRespectQuotes(OptionsStr);
                         for (const auto& Option : OptionParts)
@@ -328,9 +344,8 @@ namespace MDU
             else if (CurrentSection == Section::Dependancies)
             {
                 if (!Text.empty())
-                    metadata.Dependancies.push_back(Text);
+                    metadata.Dependancies.push_back(StripQuotes(Text));
 
-                metadata.Dependancies.push_back(Text);
                 continue;
             }
             else
@@ -340,11 +355,23 @@ namespace MDU
                 if (Position != std::string::npos)
                 {
                     std::string Key = Trim(Text.substr(0, Position));
-                    std::string Value = Trim(Text.substr(Position + 1));
+                    std::string Value = StripQuotes(Trim(Text.substr(Position + 1)));
 
                     if (Key == "ModuleName")
                     {
                         metadata.ModuleName = Value;
+                    }
+                    else if (Key == "ModuleType")
+                    {
+                        metadata.ModuleType = Value;
+                    }
+                    else if (Key == "ModuleVersion")
+                    {
+                        metadata.ModuleVersion = Value;
+                    }
+                    else if (Key == "Author")
+                    {
+                        metadata.Author = Value;
                     }
                 }
             }
@@ -352,19 +379,19 @@ namespace MDU
 
         if (metadata.ModuleName.empty())
         {
-            return {false, {}, "ModuleName is required but not found in the header: ERROR 008"};
+            return {false, {}, "[MDP008] ModuleName is required but missing from header."};
         }
         if (metadata.InputPins.empty() && metadata.OutputPins.empty())
         {
-            return {false, {}, "At least one input or output pin is required: ERROR 009"};
+            return {false, {}, "[MDP009] At least one input or output pin is required."};
         }
         if (metadata.Parameters.empty())
         {
-            return {false, {}, "At least one parameter is required: ERROR 010"};
+            return {false, {}, "[MDP010] At least one parameter is required."};
         }
         if (metadata.ModuleType.empty())
         {
-            return {false, {}, "ModuleType is required but not found in the header: ERROR 011"};
+            return {false, {}, "[MDP011] ModuleType is required but missing from header."};
         }
 
         return {true, metadata, ""};

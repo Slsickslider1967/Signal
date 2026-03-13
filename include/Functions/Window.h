@@ -12,6 +12,7 @@ namespace Window
     void ImGuiInit();
     void ImGuiShutdown();
 
+    // Utility functions
     void ClearColor(float r, float g, float b, float a);
     void SwapBuffers();
     bool IsKeyPressed(int key);

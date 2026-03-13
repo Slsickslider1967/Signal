@@ -2,7 +2,7 @@
 
 #include <string>
 
-#include "mdu_api.h"
+#include "MDU/mdu_api.h"
 
 namespace MDU
 {

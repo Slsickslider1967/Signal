@@ -6,7 +6,9 @@
 #include "WaveForm.h"
 #include "VoltageControllFilter.h"
 
-// -----VCO Module Config-----
+
+// File will most likely be rewritten to be worked with .mdu
+
 struct VCOConfig
 {
     WaveForm waveform{};

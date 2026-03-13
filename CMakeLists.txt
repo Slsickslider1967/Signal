@@ -117,6 +117,8 @@ add_executable(Signals
 	src/Modules/ModuleEditor.cpp
 	src/Modules/WaveFormGenerator.cpp
 	src/Modules/Output.cpp
+	src/MDU/ModuleLoader.cpp
+	src/MDU/mduParser.cpp
 	src/Functions/Window.cpp
 	src/Functions/ImGuiUtil.cpp
 	src/Functions/Audio.cpp
@@ -145,6 +147,7 @@ target_link_libraries(Signals PRIVATE
 	OpenGL::GL
 	SDL2::SDL2
 	glad_gl_core_33
+	dl
 )
 
 add_dependencies(Signals glad_gl_core_33)
