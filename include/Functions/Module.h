@@ -5,6 +5,7 @@
 
 #include "WaveForm.h"
 #include "VoltageControllFilter.h"
+#include "MDU/mduParser.h"
 
 
 // File will most likely be rewritten to be worked with .mdu
@@ -50,7 +51,7 @@ struct OutputConfig
     float outputLevel = 0.8f;
 };
 
-// -----Main Module Struct-----
+// This is the old Module struct probs keep for backwards compat
 struct Module
 {
     ModuleType Type;
@@ -93,4 +94,21 @@ struct Module
     VCFConfig vcfConfig;
     VCAConfig vcaConfig;
     OutputConfig outputConfig;
+};
+
+// New dynamic module struct to be used with .mdu
+struct DynamicModule
+{
+    int ID = -1;
+    std::string Name;
+    bool Active = true;
+
+    std::string SourcePath;
+    MDU::MetaData Metadata;
+
+    MDU::Module* Instance = nullptr;
+    MDU::DestroyFn Destroy = nullptr;
+
+    int InPins = 0;
+    int OutPins = 0;
 };

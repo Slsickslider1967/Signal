@@ -1,4 +1,4 @@
-#include "../../include/MDU/FileWatcher.h"
+#include "MDU/FileWatcher.h"
 
 #include <system_error>
 
@@ -54,7 +54,7 @@ namespace MDU
         KnownFiles = BuildSnapshot();
     }
 
-    std::vector<FileChange> FileWatcher::DetectChanges()
+    std::vector<FileChange> FileWatcher::PollChanges()
     {
         std::vector<FileChange> Changes;
 

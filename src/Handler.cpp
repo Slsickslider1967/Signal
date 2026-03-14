@@ -1,42 +1,41 @@
+#include <algorithm>
+#include <chrono>
+#include <cstdio>
 #include <iostream>
 #include <list>
-#include <thread>
-#include <chrono>
 #include <map>
+#include <string>
+#include <thread>
+#include <vector>
 
 #include "imgui.h"
 #include "imgui_stdlib.h"
 #include "imnodes.h"
-#include <vector>
-#include <string>
-#include <algorithm>
-#include <cstdio>
 
-// --Local headers--
-#include "../include/Functions/Window.h"
 #include "../include/Functions/Audio.h"
-#include "../include/Functions/Module.h"
 #include "../include/Functions/ImGuiUtil.h"
-#include "../include/Output.h"
-#include "../include/VoltageControllFilter.h"
-#include "../include/WaveForm.h"
-#include "../include/Voltage-ControlledAmplifier.h"
+#include "../include/Functions/Module.h"
+#include "../include/Functions/Window.h"
 #include "../include/LowFrequencyOscillator.h"
-#include "../include/ModuleEditor.h"
+#include "../include/MDU/FileWatcher.h"
 #include "../include/MDU/ModuleLoader.h"
 #include "../include/MDU/mduParser.h"
+#include "../include/ModuleEditor.h"
+#include "../include/Output.h"
+#include "../include/Voltage-ControlledAmplifier.h"
+#include "../include/VoltageControllFilter.h"
+#include "../include/WaveForm.h"
 
-// --Rack Structure--
 struct Rack
 {
     int ID;
     std::string Name;
     std::list<Module> Modules;
+    std::list<DynamicModule> DynamicModules;
     std::vector<Link> Links;
     bool Enabled = true;
 };
 
-// --Variables--
 static int NextRackID = 1;
 static int NextModuleID = 1;
 static int NextLinkID = 1;
@@ -44,91 +43,15 @@ std::list<Rack> Racks;
 static int SelectedModuleID = -1;
 static int SelectedRackID = -1;
 
-// --Forward declarations for addon modules--
+static MDU::ModuleLoader GModuleLoader;
+static MDU::FileWatcher GFileWatcher;
+static bool GFileWatcherInitialized = false;
+
 namespace SpeedManipulation
 {
     void MainImgui();
 }
 
-// --Rack Management Functions--
-Rack *CreateRack(const std::string &name)
-{
-    Rack newRack;
-    newRack.ID = NextRackID++;
-    newRack.Name = name;
-    newRack.Enabled = true;
-    Racks.push_back(newRack);
-    return &Racks.back();
-}
-
-void DeleteRack(int rackID)
-{
-    Racks.remove_if([rackID](const Rack &r)
-                    { return r.ID == rackID; });
-}
-
-void AddModuleToRack(Rack &rack, ModuleType type, const std::string &name)
-{
-    Module module(type);
-    module.ID = NextModuleID++;
-    module.Name = name;
-    module.Active = true;
-
-    if (type == MODULE_VCO)
-    {
-        WaveFormGen::InitializeVCOWaveForm(module.vcoConfig.waveform, module.ID);
-    }
-    else if (type == MODULE_LFO)
-    {
-        LFO::InitializeLFOWaveForm(module.lfoConfig.waveform, module.ID);
-    }
-
-    rack.Modules.push_back(module);
-}
-
-void RemoveModuleFromRack(Rack &rack, int moduleID)
-{
-    rack.Modules.remove_if([moduleID](const Module &m)
-                           { return m.ID == moduleID; });
-}
-
-const char *ModuleTypeToString(ModuleType type)
-{
-    switch (type)
-    {
-    case MODULE_VCO:
-        return "VCO";
-    case MODULE_LFO:
-        return "LFO";
-    case MODULE_VCF:
-        return "VCF";
-    case MODULE_VCA:
-        return "VCA";
-    case MODULE_OUTPUT:
-        return "Output";
-    default:
-        return "Unknown";
-    }
-}
-
-const char *FilterTypeToString(FilterType type)
-{
-    switch (type)
-    {
-    case FILTER_LowPass:
-        return "Low-Pass";
-    case FILTER_HighPass:
-        return "High-Pass";
-    case FILTER_BandPass:
-        return "Band-Pass";
-    case FILTER_NOTCH:
-        return "Notch";
-    default:
-        return "Unknown";
-    }
-}
-
-// --Function Prototypes--
 void MainWindow();
 void CleanUp();
 
@@ -139,21 +62,38 @@ void DrawRackEditor(Rack &rack);
 void CreateLinks(Rack &rack);
 void DrawLinks(Rack &rack);
 void AddPins(const Module &module);
+void AddPins(const DynamicModule &module);
+void AddPinsWithLabels(int moduleID, int inputPins, int outputPins,
+                       const std::vector<std::string> *inputLabels = nullptr,
+                       const std::vector<std::string> *outputLabels = nullptr);
+int MakeInputAttributeID(int moduleID, int pinIndex);
+int MakeOutputAttributeID(int moduleID, int pinIndex);
 
 void ChildNodeWindow();
 void DrawModuleDetails();
-bool PopUpTool(Rack &rack);
+
 void AudioFilterCallback(float *buffer, int numSamples, void *userData);
 void SetupAudioHandling();
 void ShutdownAudioHandling();
 void UpdateAudioWaveFormsFromRacks();
 
+Rack *CreateRack(const std::string &name);
+void DeleteRack(int rackID);
+void AddModuleToRack(Rack &rack, ModuleType type, const std::string &name);
+bool AddDynamicModuleToRack(Rack &rack, const std::string &sourcePath, std::string *errorOut);
+void RemoveModuleFromRack(Rack &rack, int moduleID);
+void RemoveDynamicModuleFromRack(DynamicModule &module);
+void RemoveNode(int nodeID);
+const char *ModuleTypeToString(ModuleType type);
+const char *FilterTypeToString(FilterType type);
 void AddRackTool();
-void PopUpTool();
+bool PopUpTool(Rack &rack);
+void DrawAvailableModulesChild(Rack &rack);
 Rack *FindRackByID(int rackID);
 
-// mdu prototypes
-void ProcessMDUModule(const MDU::BufferView& bufferView, MDU::Module* module);
+void RemoveLinksForModule(Rack &rack, int moduleID);
+void RemoveDynamicModulesFromAllRacksBySourcePath(const std::string &sourcePath);
+void ProcessMduFileChanges();
 
 int main()
 {
@@ -173,7 +113,7 @@ int main()
             {
                 if (ImGui::MenuItem("Add Rack"))
                 {
-                     CreateRack(std::string("Rack ") + std::to_string(NextRackID));
+                    CreateRack(std::string("Rack ") + std::to_string(NextRackID));
                 }
                 if (ImGui::BeginMenu("Remove Rack"))
                 {
@@ -203,10 +143,10 @@ int main()
                     for (const auto &rack : Racks)
                     {
                         std::string label = "Save " + rack.Name;
+                        (void)label;
                     }
                     ImGui::EndMenu();
                 }
-
 
                 ImGui::EndMenu();
             }
@@ -231,9 +171,42 @@ int main()
                             AddModuleToRack(*selectedRack, MODULE_VCA, "VCA-1");
                         if (ImGui::MenuItem("Output"))
                             AddModuleToRack(*selectedRack, MODULE_OUTPUT, "Output");
+
+                        if (ImGui::BeginMenu("MDU Loaded Modules"))
+                        {
+                            const auto &loadedModules = GModuleLoader.GetLoadedModules();
+                            if (loadedModules.empty())
+                            {
+                                ImGui::TextDisabled("No loaded .mdu modules");
+                            }
+                            else
+                            {
+                                for (const auto &entry : loadedModules)
+                                {
+                                    const std::string &sourcePath = entry.first;
+                                    const auto &loadedModule = entry.second;
+
+                                    std::string label = loadedModule.Metadata.ModuleName.empty()
+                                                            ? sourcePath
+                                                            : loadedModule.Metadata.ModuleName;
+
+                                    if (ImGui::MenuItem(label.c_str()))
+                                    {
+                                        std::string error;
+                                        AddDynamicModuleToRack(*selectedRack, sourcePath, &error);
+                                        if (!error.empty())
+                                        {
+                                            std::cerr << error << std::endl;
+                                        }
+                                    }
+                                }
+                            }
+
+                            ImGui::EndMenu();
+                        }
                     }
 
-                    ImGui::EndMenu();   
+                    ImGui::EndMenu();
                 }
 
                 ImGui::Separator();
@@ -253,28 +226,25 @@ int main()
             ImGui::EndMainMenuBar();
         }
 
-
-
         ImGuiViewport *mainViewport = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(mainViewport->WorkPos);
         ImGui::SetNextWindowSize(mainViewport->WorkSize);
         ImGui::SetNextWindowViewport(mainViewport->ID);
 
-        ImGuiWindowFlags rackManagerFlags = 
-                                            ImGuiWindowFlags_NoDocking |
-                                            ImGuiWindowFlags_NoMove |
-                                            ImGuiWindowFlags_NoResize |
-                                            ImGuiWindowFlags_NoCollapse |
-                                            ImGuiWindowFlags_NoSavedSettings |
-                                            ImGuiWindowFlags_NoBringToFrontOnFocus |
-                                            ImGuiWindowFlags_NoTitleBar |
-                                            ImGuiWindowFlags_NoNavFocus;
+        ImGuiWindowFlags rackManagerFlags =
+            ImGuiWindowFlags_NoDocking |
+            ImGuiWindowFlags_NoMove |
+            ImGuiWindowFlags_NoResize |
+            ImGuiWindowFlags_NoCollapse |
+            ImGuiWindowFlags_NoSavedSettings |
+            ImGuiWindowFlags_NoBringToFrontOnFocus |
+            ImGuiWindowFlags_NoTitleBar |
+            ImGuiWindowFlags_NoNavFocus;
 
         ImGui::SetNextWindowCollapsed(false, ImGuiCond_Always);
         ImGui::SetNextWindowBgAlpha(1.0f);
         ImGui::Begin("Rack Manager", nullptr, rackManagerFlags);
-        
-        // Display all racks
+
         for (auto rackIt = Racks.begin(); rackIt != Racks.end();)
         {
             Rack &rack = *rackIt;
@@ -347,6 +317,7 @@ int main()
         Render();
 
         UpdateAudioWaveFormsFromRacks();
+        ProcessMduFileChanges();
 
         std::this_thread::sleep_for(std::chrono::milliseconds(16));
     }
@@ -355,9 +326,72 @@ int main()
     return 0;
 }
 
-
 // --Draw--
 
+void MainWindow()
+{
+    setenv("PREFER_X11", "1", 1);
+
+    Window::CreateWindow(1280, 720, "Signal Handler");
+    SetupAudioHandling();
+
+    Window::PollEvents();
+}
+
+void CleanUp()
+{
+    Window::DestroyWindow();
+    ShutdownAudioHandling();
+}
+
+void Render()
+{
+    Window::ClearColor(0.08f, 0.08f, 0.10f, 1.0f);
+    ImGuiUtil::Render();
+    Window::SwapBuffers();
+    Window::PollEvents();
+}
+
+int MakeInputAttributeID(int moduleID, int pinIndex)
+{
+    return moduleID * 1000 + 100 + pinIndex;
+}
+
+int MakeOutputAttributeID(int moduleID, int pinIndex)
+{
+    return moduleID * 1000 + pinIndex;
+}
+
+void AddPinsWithLabels(int moduleID, int inputPins, int outputPins,
+                       const std::vector<std::string> *inputLabels,
+                       const std::vector<std::string> *outputLabels)
+{
+    for (int i = 0; i < inputPins; i++)
+    {
+        const char *label = "In";
+        if (inputLabels != nullptr && i < static_cast<int>(inputLabels->size()) && !(*inputLabels)[i].empty())
+        {
+            label = (*inputLabels)[i].c_str();
+        }
+
+        ImNodes::BeginInputAttribute(MakeInputAttributeID(moduleID, i));
+        ImGui::Text("%s", label);
+        ImNodes::EndInputAttribute();
+    }
+
+    for (int i = 0; i < outputPins; i++)
+    {
+        const char *label = "Out";
+        if (outputLabels != nullptr && i < static_cast<int>(outputLabels->size()) && !(*outputLabels)[i].empty())
+        {
+            label = (*outputLabels)[i].c_str();
+        }
+
+        ImNodes::BeginOutputAttribute(MakeOutputAttributeID(moduleID, i));
+        ImGui::Text("%s", label);
+        ImNodes::EndOutputAttribute();
+    }
+}
 
 void DrawRackEditor(Rack &rack)
 {
@@ -369,9 +403,7 @@ void DrawRackEditor(Rack &rack)
     }
     bool openContextMenu = ImNodes::IsEditorHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right);
 
-    int nodeIndex = 0;
-
-    for (auto moduleIt = rack.Modules.begin(); moduleIt != rack.Modules.end();)
+    for (auto moduleIt = rack.Modules.begin(); moduleIt != rack.Modules.end(); ++moduleIt)
     {
         Module &module = *moduleIt;
 
@@ -395,9 +427,30 @@ void DrawRackEditor(Rack &rack)
         {
             SelectedModuleID = module.ID;
         }
+    }
 
-        ++moduleIt;
-        nodeIndex++;
+    for (auto dynamicModuleIt = rack.DynamicModules.begin(); dynamicModuleIt != rack.DynamicModules.end(); ++dynamicModuleIt)
+    {
+        DynamicModule &dynamicModule = *dynamicModuleIt;
+
+        ImNodes::PushAttributeFlag(ImNodesAttributeFlags_EnableLinkDetachWithDragClick);
+        ImNodes::BeginNode(dynamicModule.ID);
+
+        AddPins(dynamicModule);
+
+        ImGui::Text("MDU: %s", dynamicModule.Name.c_str());
+        if (!dynamicModule.Metadata.Author.empty())
+        {
+            ImGui::TextDisabled("by %s", dynamicModule.Metadata.Author.c_str());
+        }
+
+        ImNodes::EndNode();
+        ImNodes::PopAttributeFlag();
+
+        if (ImNodes::IsNodeSelected(dynamicModule.ID))
+        {
+            SelectedModuleID = dynamicModule.ID;
+        }
     }
 
     DrawLinks(rack);
@@ -408,32 +461,29 @@ void DrawRackEditor(Rack &rack)
 
     CreateLinks(rack);
 
+    int deletedLinkID;
+    if (ImNodes::IsLinkDestroyed(&deletedLinkID))
     {
-        int deletedLinkID;
-        if (ImNodes::IsLinkDestroyed(&deletedLinkID))
-        {
-            rack.Links.erase(
-                std::remove_if(rack.Links.begin(), rack.Links.end(),
-                               [deletedLinkID](const Link &l)
-                               { return l.ID == deletedLinkID; }),
-                rack.Links.end());
-        }
+        rack.Links.erase(
+            std::remove_if(rack.Links.begin(), rack.Links.end(),
+                           [deletedLinkID](const Link &link)
+                           { return link.ID == deletedLinkID; }),
+            rack.Links.end());
     }
-
 }
 
 void CreateLinks(Rack &rack)
 {
-    int startAttr, endAttr;
+    int startAttr;
+    int endAttr;
     if (ImNodes::IsLinkCreated(&startAttr, &endAttr))
     {
         int startModuleID = startAttr / 1000;
         int endModuleID = endAttr / 1000;
-        
+
         int startPin = startAttr % 1000;
         int endPin = endAttr % 1000;
 
-        // Output pins: remainder < 100, Input pins: remainder >= 100
         bool isStartOutput = (startPin < 100);
         bool isEndInput = (endPin >= 100);
 
@@ -467,47 +517,40 @@ void DrawLinks(Rack &rack)
 {
     for (const auto &link : rack.Links)
     {
-        ImNodes::Link(link.ID, link.StartModuleID * 1000 + link.StartPinIndex, 
-                      link.EndModuleID * 1000 + 100 + link.EndPinIndex);
+        ImNodes::Link(link.ID, MakeOutputAttributeID(link.StartModuleID, link.StartPinIndex),
+                      MakeInputAttributeID(link.EndModuleID, link.EndPinIndex));
     }
 }
 
 void AddPins(const Module &module)
 {
-
-    for (int i = 0; i < module.InPins; i++)
-    {
-        ImNodes::BeginInputAttribute(module.ID * 1100 + i);
-        ImGui::Text("In");
-        ImNodes::EndInputAttribute();
-    }
-    for (int i = 0; i < module.OutPins; i++)
-    {
-        ImNodes::BeginOutputAttribute(module.ID * 1000 + i);
-        ImGui::Text("Out");
-        ImNodes::EndOutputAttribute();
-    }
+    AddPinsWithLabels(module.ID, module.InPins, module.OutPins);
 }
 
-void DrawChildNodeWindow()
+void AddPins(const DynamicModule &module)
+{
+    std::vector<std::string> inputLabels;
+    inputLabels.reserve(module.Metadata.InputPins.size());
+    for (const auto &pin : module.Metadata.InputPins)
+    {
+        inputLabels.push_back(pin.label.empty() ? pin.ID : pin.label);
+    }
+
+    std::vector<std::string> outputLabels;
+    outputLabels.reserve(module.Metadata.OutputPins.size());
+    for (const auto &pin : module.Metadata.OutputPins)
+    {
+        outputLabels.push_back(pin.label.empty() ? pin.ID : pin.label);
+    }
+
+    AddPinsWithLabels(module.ID, module.InPins, module.OutPins, &inputLabels, &outputLabels);
+}
+
+void ChildNodeWindow()
 {
     ImGui::BeginChild("ChildNodeWindow", ImVec2(0, 200), true);
     ImGui::Text("This is a child window inside the node editor.");
     ImGui::EndChild();
-}
-
-void RemoveNode(int nodeID)
-{
-    for (auto &rack : Racks)
-    {
-        RemoveModuleFromRack(rack, nodeID);
-        
-        rack.Links.erase(
-            std::remove_if(rack.Links.begin(), rack.Links.end(),
-                           [nodeID](const Link &l)
-                           { return l.StartModuleID == nodeID || l.EndModuleID == nodeID; }),
-            rack.Links.end());
-    }
 }
 
 void DrawModuleDetails()
@@ -557,38 +600,7 @@ void DrawModuleDetails()
     }
 }
 
-// --Draw Handling--
-
-
-
-void MainWindow()
-{
-    setenv("PREFER_X11", "1", 1);
-
-    Window::CreateWindow(1280, 720, "Signal Handler");
-    SetupAudioHandling();
-
-    Window::PollEvents();
-}
-
-void CleanUp()
-{
-    Window::DestroyWindow();
-    ShutdownAudioHandling();
-}
-
-void Render()
-{
-    Window::ClearColor(0.08f, 0.08f, 0.10f, 1.0f);
-    ImGuiUtil::Render();
-    Window::SwapBuffers();
-    Window::PollEvents();
-}
-
-
 // --Audio Handling--
-
-
 
 void SetupAudioHandling()
 {
@@ -665,6 +677,8 @@ void UpdateAudioWaveFormsFromRacks()
 
 void AudioFilterCallback(float *buffer, int numSamples, void *userData)
 {
+    (void)userData;
+
     for (auto &rack : Racks)
     {
         if (!rack.Enabled)
@@ -713,40 +727,40 @@ void AudioFilterCallback(float *buffer, int numSamples, void *userData)
 
             switch (module.Type)
             {
-                case MODULE_VCO:
-                    break;
+            case MODULE_VCO:
+                break;
 
-                case MODULE_LFO:
-                    break;
+            case MODULE_LFO:
+                break;
 
-                case MODULE_VCF:
-                    VCF::ProcessAudio(currentInput, currentOutput, numSamples, static_cast<int>(module.vcfConfig.filterType));
-                    std::swap(currentInput, currentOutput);
-                    needsSwap = !needsSwap;
-                    break;
+            case MODULE_VCF:
+                VCF::ProcessAudio(currentInput, currentOutput, numSamples, static_cast<int>(module.vcfConfig.filterType));
+                std::swap(currentInput, currentOutput);
+                needsSwap = !needsSwap;
+                break;
 
-                case MODULE_VCA:
-                    {
-                        const float *externalCVBuffer = nullptr;
-                        int externalCVBufferSize = 0;
+            case MODULE_VCA:
+            {
+                const float *externalCVBuffer = nullptr;
+                int externalCVBufferSize = 0;
 
-                        auto cvIt = normalizedCVInputs.find(module.ID);
-                        if (cvIt != normalizedCVInputs.end())
-                        {
-                            externalCVBuffer = cvIt->second.data();
-                            externalCVBufferSize = static_cast<int>(cvIt->second.size());
-                        }
+                auto cvIt = normalizedCVInputs.find(module.ID);
+                if (cvIt != normalizedCVInputs.end())
+                {
+                    externalCVBuffer = cvIt->second.data();
+                    externalCVBufferSize = static_cast<int>(cvIt->second.size());
+                }
 
-                        VCA::SetCVInput(module.vcaConfig.cvInput);
-                        VCA::ProcessAudioWithCVBuffer(currentInput, currentOutput, numSamples, externalCVBuffer, externalCVBufferSize);
-                    }
-                    std::swap(currentInput, currentOutput);
-                    needsSwap = !needsSwap;
-                    break;
+                VCA::SetCVInput(module.vcaConfig.cvInput);
+                VCA::ProcessAudioWithCVBuffer(currentInput, currentOutput, numSamples, externalCVBuffer, externalCVBufferSize);
+            }
+                std::swap(currentInput, currentOutput);
+                needsSwap = !needsSwap;
+                break;
 
-                case MODULE_OUTPUT:
-                    Output::ProcessAudio(currentInput, numSamples);
-                    break;
+            case MODULE_OUTPUT:
+                Output::ProcessAudio(currentInput, numSamples);
+                break;
             }
         }
 
@@ -764,9 +778,173 @@ void ShutdownAudioHandling()
     Audio::Close();
 }
 
-
 // --Tools--
 
+Rack *CreateRack(const std::string &name)
+{
+    Rack newRack;
+    newRack.ID = NextRackID++;
+    newRack.Name = name;
+    newRack.Enabled = true;
+    Racks.push_back(newRack);
+    return &Racks.back();
+}
+
+void DeleteRack(int rackID)
+{
+    for (auto it = Racks.begin(); it != Racks.end(); ++it)
+    {
+        if (it->ID != rackID)
+        {
+            continue;
+        }
+
+        for (auto &dynamicModule : it->DynamicModules)
+        {
+            RemoveDynamicModuleFromRack(dynamicModule);
+        }
+
+        Racks.erase(it);
+        return;
+    }
+}
+
+void AddModuleToRack(Rack &rack, ModuleType type, const std::string &name)
+{
+    Module module(type);
+    module.ID = NextModuleID++;
+    module.Name = name;
+    module.Active = true;
+
+    if (type == MODULE_VCO)
+    {
+        WaveFormGen::InitializeVCOWaveForm(module.vcoConfig.waveform, module.ID);
+    }
+    else if (type == MODULE_LFO)
+    {
+        LFO::InitializeLFOWaveForm(module.lfoConfig.waveform, module.ID);
+    }
+
+    rack.Modules.push_back(module);
+}
+
+bool AddDynamicModuleToRack(Rack &rack, const std::string &sourcePath, std::string *errorOut)
+{
+    const auto &loadedMap = GModuleLoader.GetLoadedModules();
+    auto it = loadedMap.find(sourcePath);
+    if (it == loadedMap.end())
+    {
+        if (errorOut)
+            *errorOut = "Loaded module not found for path: " + sourcePath;
+        return false;
+    }
+
+    const auto &loaded = it->second;
+    if (loaded.Create == nullptr || loaded.Destroy == nullptr)
+    {
+        if (errorOut)
+            *errorOut = "Factory functions missing for: " + sourcePath;
+        return false;
+    }
+
+    MDU::Module *instance = loaded.Create();
+    if (instance == nullptr)
+    {
+        if (errorOut)
+            *errorOut = "Create returned null for: " + sourcePath;
+        return false;
+    }
+
+    DynamicModule dynamicModule;
+    dynamicModule.ID = NextModuleID++;
+    dynamicModule.SourcePath = sourcePath;
+    dynamicModule.Metadata = loaded.Metadata;
+    dynamicModule.Name = loaded.Metadata.ModuleName.empty() ? "MDU Module" : loaded.Metadata.ModuleName;
+    dynamicModule.Instance = instance;
+    dynamicModule.Destroy = loaded.Destroy;
+    dynamicModule.InPins = static_cast<int>(loaded.Metadata.InputPins.size());
+    dynamicModule.OutPins = static_cast<int>(loaded.Metadata.OutputPins.size());
+
+    rack.DynamicModules.push_back(dynamicModule);
+    return true;
+}
+
+void RemoveModuleFromRack(Rack &rack, int moduleID)
+{
+    rack.Modules.remove_if([moduleID](const Module &module)
+                           { return module.ID == moduleID; });
+}
+
+void RemoveDynamicModuleFromRack(DynamicModule &module)
+{
+    if (module.Instance && module.Destroy)
+    {
+        module.Destroy(module.Instance);
+    }
+    module.Instance = nullptr;
+    module.Destroy = nullptr;
+}
+
+void RemoveNode(int nodeID)
+{
+    for (auto &rack : Racks)
+    {
+        RemoveModuleFromRack(rack, nodeID);
+
+        rack.DynamicModules.remove_if([nodeID](DynamicModule &module)
+                                      {
+                                          if (module.ID != nodeID)
+                                          {
+                                              return false;
+                                          }
+
+                                          RemoveDynamicModuleFromRack(module);
+                                          return true;
+                                      });
+
+        rack.Links.erase(
+            std::remove_if(rack.Links.begin(), rack.Links.end(),
+                           [nodeID](const Link &link)
+                           { return link.StartModuleID == nodeID || link.EndModuleID == nodeID; }),
+            rack.Links.end());
+    }
+}
+
+const char *ModuleTypeToString(ModuleType type)
+{
+    switch (type)
+    {
+    case MODULE_VCO:
+        return "VCO";
+    case MODULE_LFO:
+        return "LFO";
+    case MODULE_VCF:
+        return "VCF";
+    case MODULE_VCA:
+        return "VCA";
+    case MODULE_OUTPUT:
+        return "Output";
+    default:
+        return "Unknown";
+    }
+}
+
+const char *FilterTypeToString(FilterType type)
+{
+    switch (type)
+    {
+    case FILTER_LowPass:
+        return "Low-Pass";
+    case FILTER_HighPass:
+        return "High-Pass";
+    case FILTER_BandPass:
+        return "Band-Pass";
+    case FILTER_NOTCH:
+        return "Notch";
+    default:
+        return "Unknown";
+    }
+}
 
 void AddRackTool()
 {
@@ -785,16 +963,8 @@ bool PopUpTool(Rack &rack)
 
         ImGui::Separator();
 
-        if (ImGui::Selectable("Add VCO", false, ImGuiSelectableFlags_DontClosePopups))
-            AddModuleToRack(rack, MODULE_VCO, "VCO-1");
-        if (ImGui::Selectable("Add LFO", false, ImGuiSelectableFlags_DontClosePopups))
-            AddModuleToRack(rack, MODULE_LFO, "LFO-1");
-        if (ImGui::Selectable("Add VCF", false, ImGuiSelectableFlags_DontClosePopups))
-            AddModuleToRack(rack, MODULE_VCF, "VCF-1");
-        if (ImGui::Selectable("Add VCA", false, ImGuiSelectableFlags_DontClosePopups))
-            AddModuleToRack(rack, MODULE_VCA, "VCA-1");
-        if (ImGui::Selectable("Add Output", false, ImGuiSelectableFlags_DontClosePopups))
-            AddModuleToRack(rack, MODULE_OUTPUT, "Output-1");
+        ImGui::Text("Available Modules");
+        DrawAvailableModulesChild(rack);
 
         ImGui::Separator();
 
@@ -814,6 +984,49 @@ bool PopUpTool(Rack &rack)
     return requestDelete;
 }
 
+void DrawAvailableModulesChild(Rack &rack)
+{
+    if (!ImGui::BeginChild("AvailableModulesChild", ImVec2(0.0f, 220.0f), true))
+    {
+        ImGui::EndChild();
+        return;
+    }
+
+    if (ImGui::Selectable("VCO", false, ImGuiSelectableFlags_DontClosePopups))
+        AddModuleToRack(rack, MODULE_VCO, "VCO-1");
+    if (ImGui::Selectable("LFO", false, ImGuiSelectableFlags_DontClosePopups))
+        AddModuleToRack(rack, MODULE_LFO, "LFO-1");
+    if (ImGui::Selectable("VCF", false, ImGuiSelectableFlags_DontClosePopups))
+        AddModuleToRack(rack, MODULE_VCF, "VCF-1");
+    if (ImGui::Selectable("VCA", false, ImGuiSelectableFlags_DontClosePopups))
+        AddModuleToRack(rack, MODULE_VCA, "VCA-1");
+    if (ImGui::Selectable("Output", false, ImGuiSelectableFlags_DontClosePopups))
+        AddModuleToRack(rack, MODULE_OUTPUT, "Output-1");
+
+    const auto &loadedModules = GModuleLoader.GetLoadedModules();
+    for (const auto &entry : loadedModules)
+    {
+        const std::string &sourcePath = entry.first;
+        const auto &loadedModule = entry.second;
+
+        std::string label = loadedModule.Metadata.ModuleName.empty()
+                                ? sourcePath
+                                : loadedModule.Metadata.ModuleName;
+
+        if (ImGui::Selectable(label.c_str(), false, ImGuiSelectableFlags_DontClosePopups))
+        {
+            std::string error;
+            AddDynamicModuleToRack(rack, sourcePath, &error);
+            if (!error.empty())
+            {
+                std::cerr << error << std::endl;
+            }
+        }
+    }
+
+    ImGui::EndChild();
+}
+
 Rack *FindRackByID(int rackID)
 {
     for (auto &rack : Racks)
@@ -825,27 +1038,72 @@ Rack *FindRackByID(int rackID)
     return nullptr;
 }
 
-
 // --mdu handling--
-void ProcessMDUModule(const MDU::BufferView& bufferView, MDU::Module* module)
-{
-    MDU::FileWatcher watcher;
-    watcher.SetWatchPaths({"src/Modules", "modules"});
-    watcher.PrimeSnapshot();
 
-    // each frame or every N milliseconds
-    for (const auto& change : watcher.PollChanges())
+void RemoveLinksForModule(Rack &rack, int moduleID)
+{
+    rack.Links.erase(
+        std::remove_if(rack.Links.begin(), rack.Links.end(),
+                       [moduleID](const Link &link)
+                       { return link.StartModuleID == moduleID || link.EndModuleID == moduleID; }),
+        rack.Links.end());
+}
+
+void RemoveDynamicModulesFromAllRacksBySourcePath(const std::string &sourcePath)
+{
+    for (auto &rack : Racks)
+    {
+        rack.DynamicModules.remove_if([&rack, &sourcePath](DynamicModule &module)
+                                      {
+                                          if (module.SourcePath != sourcePath)
+                                          {
+                                              return false;
+                                          }
+
+                                          const int removedModuleID = module.ID;
+                                          RemoveDynamicModuleFromRack(module);
+                                          RemoveLinksForModule(rack, removedModuleID);
+                                          return true;
+                                      });
+    }
+}
+
+void ProcessMduFileChanges()
+{
+    if (!GFileWatcherInitialized)
+    {
+        GFileWatcher.SetWatchPaths({"src/Modules", "modules"});
+        GFileWatcher.PrimeSnapshot();
+        GFileWatcherInitialized = true;
+    }
+
+    for (const auto &change : GFileWatcher.PollChanges())
     {
         if (change.Type == MDU::FileChangeType::Added ||
             change.Type == MDU::FileChangeType::Modified)
         {
+            if (change.Type == MDU::FileChangeType::Modified)
+            {
+                RemoveDynamicModulesFromAllRacksBySourcePath(change.Path);
+            }
+
             std::string error;
-            loader.LoadFromMduFile(change.Path, &error);
+            GModuleLoader.LoadFromMduFile(change.Path, &error);
+            if (!error.empty())
+            {
+                std::cerr << error << std::endl;
+            }
         }
         else if (change.Type == MDU::FileChangeType::Removed)
         {
+            RemoveDynamicModulesFromAllRacksBySourcePath(change.Path);
+
             std::string error;
-            loader.UnloadByPath(change.Path, &error);
+            GModuleLoader.UnloadByPath(change.Path, &error);
+            if (!error.empty())
+            {
+                std::cerr << error << std::endl;
+            }
         }
     }
 }

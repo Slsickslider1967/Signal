@@ -118,6 +118,7 @@ add_executable(Signals
 	src/Modules/WaveFormGenerator.cpp
 	src/Modules/Output.cpp
 	src/MDU/ModuleLoader.cpp
+	src/MDU/FileWatcher.cpp
 	src/MDU/mduParser.cpp
 	src/Functions/Window.cpp
 	src/Functions/ImGuiUtil.cpp
