@@ -63,31 +63,6 @@ float VoltageToNormalized(float voltage, WaveForm::VoltageRange range);
 struct Module;
 struct Link;
 
-namespace WaveFormGen
-{
-    extern std::list<WaveForm> WaveForms;
-    void MainImgui();
-    void DrawModuleEditor(Module &module, bool &requestRemove);
-    void DrawWaveFormEditor(WaveForm& wave);
-    void InitializeVCOWaveForm(WaveForm& wave, int moduleID);
-
-    std::map<int, std::vector<float>> GenerateLFOOutputs(std::list<Module>& modules, int numSamples);
-    std::map<int, std::vector<float>> BuildNormalizedCVInputs(
-        const std::list<Module>& modules,
-        const std::vector<Link>& links,
-        const std::map<int, std::vector<float>>& lfoOutputs);
-}
-
-// --Module Type Definitions--
-enum ModuleType
-{
-    MODULE_VCO,
-    MODULE_LFO,
-    MODULE_VCF,
-    MODULE_VCA,
-    MODULE_OUTPUT
-};
-
 // --Link Structure--
 struct Link
 {

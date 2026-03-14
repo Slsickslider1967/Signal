@@ -153,9 +153,10 @@ namespace MDU
 		void* handle = dlopen(sharedObjectPath.c_str(), RTLD_NOW | RTLD_LOCAL);
 		if (!handle)
 		{
+			const char* dlOpenError = dlerror();
 			if (ErrorOut)
 			{
-				*ErrorOut = "[MLD003] dlopen failed for " + sharedObjectPath + ": " + (dlerror() ? dlerror() : "unknown error");
+				*ErrorOut = "[MLD003] dlopen failed for " + sharedObjectPath + ": " + std::string(dlOpenError ? dlOpenError : "unknown error");
 			}
 			return false;
 		}
@@ -281,6 +282,13 @@ namespace MDU
 			<< " -shared -fPIC -std=c++17 -x c++"
 			<< " -I" << EscapeForShell("include")
 			<< " -I" << EscapeForShell("include/MDU")
+			<< " -I" << EscapeForShell("../include")
+			<< " -I" << EscapeForShell("../include/MDU")
+			<< " -I" << EscapeForShell("external/imgui")
+			<< " -I" << EscapeForShell("../external/imgui")
+			<< " -I" << EscapeForShell("build/_deps/imgui-src")
+			<< " -I" << EscapeForShell("../build/_deps/imgui-src")
+			<< " -I" << EscapeForShell("_deps/imgui-src")
 			<< " " << EscapeForShell(mduPath)
 			<< " -o " << EscapeForShell(sharedObjectPath);
 

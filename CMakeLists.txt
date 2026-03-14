@@ -114,9 +114,6 @@ target_link_libraries(imgui_knobs_lib PUBLIC imgui)
 
 add_executable(Signals
 	src/Handler.cpp
-	src/Modules/ModuleEditor.cpp
-	src/Modules/WaveFormGenerator.cpp
-	src/Modules/Output.cpp
 	src/MDU/ModuleLoader.cpp
 	src/MDU/FileWatcher.cpp
 	src/MDU/mduParser.cpp
@@ -125,9 +122,6 @@ add_executable(Signals
 	src/Functions/Audio.cpp
 	src/Functions/CV.cpp
 	src/Functions/WaveForm.cpp
-	src/Modules/VoltageControllFilter.cpp
-	src/Modules/Voltage-ControlledAmplifier.cpp
-	src/Modules/LowFrequencyOscillator.cpp
 )
 
 target_include_directories(Signals PRIVATE

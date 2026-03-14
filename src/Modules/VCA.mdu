@@ -1,0 +1,155 @@
+/*! Module
+ModuleName: "VCA"
+ModuleType: "Amplifier"
+ModuleVersion: "1.0.0"
+Author: "Signal"
+
+Input Pins:
+- id: audio_in, label: "Audio In"
+- id: cv_in, label: "CV In"
+
+Output Pins:
+- id: audio_out, label: "Audio Out"
+
+Parameters:
+- id: base_gain, label: "Base Gain", type: knob, min: 0.0, max: 1.0, default: 0.8
+- id: cv_amount, label: "CV Amount", type: knob, min: 0.0, max: 1.0, default: 0.5
+- id: range_min, label: "Range Min", type: knob, min: 0.0, max: 1.0, default: 0.0
+- id: range_max, label: "Range Max", type: knob, min: 0.0, max: 1.0, default: 1.0
+*/
+
+#include "mdu_api.h"
+
+class VCAModule final : public MDU::Module
+{
+public:
+    static MDU::MetaData BuildMetadata()
+    {
+        MDU::MetaData metadata;
+        metadata.ModuleName = "VCA";
+        metadata.ModuleType = "Amplifier";
+        metadata.ModuleVersion = "1.0.0";
+        metadata.Author = "Signal";
+
+        metadata.InputPins.push_back({"audio_in", "Audio In"});
+        metadata.InputPins.push_back({"cv_in", "CV In"});
+        metadata.OutputPins.push_back({"audio_out", "Audio Out"});
+
+        metadata.Parameters.push_back({"base_gain", "Base Gain", MDU::ParameterType::Knob, 0.0f, 1.0f, 0.8f, {}});
+        metadata.Parameters.push_back({"cv_amount", "CV Amount", MDU::ParameterType::Knob, 0.0f, 1.0f, 0.5f, {}});
+        metadata.Parameters.push_back({"range_min", "Range Min", MDU::ParameterType::Knob, 0.0f, 1.0f, 0.0f, {}});
+        metadata.Parameters.push_back({"range_max", "Range Max", MDU::ParameterType::Knob, 0.0f, 1.0f, 1.0f, {}});
+
+        return metadata;
+    }
+
+    void Process(const MDU::BufferView &bufferView, float /*value*/) override
+    {
+        if (bufferView.InputPins.empty() || bufferView.OutputPins.empty())
+        {
+            return;
+        }
+        if (bufferView.InputPins[0] == nullptr || bufferView.OutputPins[0] == nullptr)
+        {
+            return;
+        }
+
+        const float *in = bufferView.InputPins[0];
+        const float *cv = (bufferView.InputPins.size() > 1) ? bufferView.InputPins[1] : nullptr;
+        float *out = bufferView.OutputPins[0];
+
+        for (size_t i = 0; i < bufferView.NumberOfSamples; ++i)
+        {
+            float cvValue = 0.5f;
+            if (cv != nullptr)
+            {
+                cvValue = cv[i];
+            }
+            if (cvValue < 0.0f)
+                cvValue = 0.0f;
+            if (cvValue > 1.0f)
+                cvValue = 1.0f;
+
+            float gain = BaseGain + (cvValue - 0.5f) * CVAmount;
+            if (gain < RangeMin)
+                gain = RangeMin;
+            if (gain > RangeMax)
+                gain = RangeMax;
+
+            out[i] = in[i] * gain;
+        }
+    }
+
+    void DrawEditor() override {}
+
+    bool SetParameter(const string &parameterID, float outValue) override
+    {
+        if (parameterID == "base_gain")
+        {
+            BaseGain = Clamp01(outValue);
+            return true;
+        }
+        if (parameterID == "cv_amount")
+        {
+            CVAmount = Clamp01(outValue);
+            return true;
+        }
+        if (parameterID == "range_min")
+        {
+            RangeMin = Clamp01(outValue);
+            if (RangeMin > RangeMax)
+                RangeMax = RangeMin;
+            return true;
+        }
+        if (parameterID == "range_max")
+        {
+            RangeMax = Clamp01(outValue);
+            if (RangeMax < RangeMin)
+                RangeMin = RangeMax;
+            return true;
+        }
+        return false;
+    }
+
+    bool GetParameter(const string &parameterID, float &outValue) override
+    {
+        if (parameterID == "base_gain")
+        {
+            outValue = BaseGain;
+            return true;
+        }
+        if (parameterID == "cv_amount")
+        {
+            outValue = CVAmount;
+            return true;
+        }
+        if (parameterID == "range_min")
+        {
+            outValue = RangeMin;
+            return true;
+        }
+        if (parameterID == "range_max")
+        {
+            outValue = RangeMax;
+            return true;
+        }
+        return false;
+    }
+
+private:
+    static float Clamp01(float value)
+    {
+        if (value < 0.0f)
+            return 0.0f;
+        if (value > 1.0f)
+            return 1.0f;
+        return value;
+    }
+
+    float BaseGain = 0.8f;
+    float CVAmount = 0.5f;
+    float RangeMin = 0.0f;
+    float RangeMax = 1.0f;
+};
+
+MDU_REGISTER(VCAModule)

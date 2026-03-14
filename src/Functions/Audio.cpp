@@ -36,25 +36,35 @@ namespace Audio
 
         // read current active waves atomically (lock-free)
         auto activeWavesSnapshot = std::atomic_load(&gActiveWaves);
-        if (!activeWavesSnapshot || activeWavesSnapshot->empty()) return;
 
-        // temporary buffer reused per-wave to avoid allocating in callback
-        static thread_local std::vector<float> waveSampleBuffer;
-        if ((int)waveSampleBuffer.size() < sampleCount) waveSampleBuffer.resize(sampleCount);
-
-        // mix active waves (modify per-wave Phase stored inside the active vector)
-        for (size_t waveIndex = 0; waveIndex < activeWavesSnapshot->size(); ++waveIndex)
+        if (activeWavesSnapshot && !activeWavesSnapshot->empty())
         {
-            WaveForm& wave = (*activeWavesSnapshot)[waveIndex];
-            if (!wave.Enabled) continue;
+            // temporary buffer reused per-wave to avoid allocating in callback
+            static thread_local std::vector<float> waveSampleBuffer;
+            if ((int)waveSampleBuffer.size() < sampleCount)
+            {
+                waveSampleBuffer.resize(sampleCount);
+            }
 
-            wave.SampleRate = gSampleRate;
+            // mix active waves (modify per-wave Phase stored inside the active vector)
+            for (size_t waveIndex = 0; waveIndex < activeWavesSnapshot->size(); ++waveIndex)
+            {
+                WaveForm& wave = (*activeWavesSnapshot)[waveIndex];
+                if (!wave.Enabled)
+                {
+                    continue;
+                }
 
-            GetWaveFormData(wave, waveSampleBuffer.data(), sampleCount, 0);
+                wave.SampleRate = gSampleRate;
 
-            // add to output
-            for (int sampleIndex = 0; sampleIndex < sampleCount; ++sampleIndex)
-                outputSamples[sampleIndex] += waveSampleBuffer[sampleIndex];
+                GetWaveFormData(wave, waveSampleBuffer.data(), sampleCount, 0);
+
+                // add to output
+                for (int sampleIndex = 0; sampleIndex < sampleCount; ++sampleIndex)
+                {
+                    outputSamples[sampleIndex] += waveSampleBuffer[sampleIndex];
+                }
+            }
         }
         
         if (gFilterCallback)

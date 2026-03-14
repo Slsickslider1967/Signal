@@ -1,1 +1,17 @@
-This is a test for the .mdu file 
+/*! Module
+ModuleName: "Test"
+ModuleType: "Test"
+ModuleVersion: "1.0.0"
+Author: "Signal"
+
+Input Pins:
+- id: rate_cv, label: "Test In
+
+Output Pins:
+- id: cv_out, label: "Test Out"
+
+Parameters:
+- id: TestID, label: "Test", type: knob, min: 0.1, max: 20.0, default: 1.0
+*/
+
+

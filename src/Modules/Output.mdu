@@ -1,0 +1,104 @@
+/*! Module
+ModuleName: "Output"
+ModuleType: "Output"
+ModuleVersion: "1.0.0"
+Author: "Signal"
+
+Input Pins:
+- id: in_audio, label: "Audio In"
+
+Output Pins:
+- id: out_audio, label: "Audio Out"
+
+Parameters:
+- id: output_level, label: "Output Level", type: knob, min: 0.0, max: 1.0, default: 0.8
+*/
+
+#include "mdu_api.h"
+
+class OutputModule final : public MDU::Module
+{
+public:
+	OutputModule() = default;
+
+	static MDU::MetaData BuildMetadata()
+	{
+		MDU::MetaData metadata;
+		metadata.ModuleName = "Output";
+		metadata.ModuleType = "Output";
+		metadata.ModuleVersion = "1.0.0";
+		metadata.Author = "Signal";
+
+		metadata.InputPins.push_back({"in_audio", "Audio In"});
+		metadata.OutputPins.push_back({"out_audio", "Audio Out"});
+
+		MDU::ParameterDefinition outputLevel;
+		outputLevel.ID = "output_level";
+		outputLevel.label = "Output Level";
+		outputLevel.type = MDU::ParameterType::Knob;
+		outputLevel.minValue = 0.0f;
+		outputLevel.maxValue = 1.0f;
+		outputLevel.defaultValue = 0.8f;
+		metadata.Parameters.push_back(outputLevel);
+
+		return metadata;
+	}
+
+	void Process(const MDU::BufferView &bufferView, float /*value*/) override
+	{
+		if (bufferView.InputPins.empty() || bufferView.OutputPins.empty())
+		{
+			return;
+		}
+
+		const float *input = bufferView.InputPins[0];
+		float *output = bufferView.OutputPins[0];
+		if (input == nullptr || output == nullptr)
+		{
+			return;
+		}
+
+		for (size_t i = 0; i < bufferView.NumberOfSamples; ++i)
+		{
+			output[i] = input[i] * OutputLevel;
+		}
+	}
+
+	void DrawEditor() override {}
+
+	bool SetParameter(const string &parameterID, float outValue) override
+	{
+		if (parameterID != "output_level")
+		{
+			return false;
+		}
+
+		if (outValue < 0.0f)
+		{
+			outValue = 0.0f;
+		}
+		if (outValue > 1.0f)
+		{
+			outValue = 1.0f;
+		}
+
+		OutputLevel = outValue;
+		return true;
+	}
+
+	bool GetParameter(const string &parameterID, float &outValue) override
+	{
+		if (parameterID != "output_level")
+		{
+			return false;
+		}
+
+		outValue = OutputLevel;
+		return true;
+	}
+
+private:
+	float OutputLevel = 0.8f;
+};
+
+MDU_REGISTER(OutputModule)
