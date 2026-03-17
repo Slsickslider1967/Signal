@@ -23,6 +23,7 @@
 #include "../include/Functions/Window.h"
 #include "../include/MDU/FileWatcher.h"
 #include "../include/MDU/ModuleLoader.h"
+#include "../include/Functions/ConsoleHandling.h"
 
 struct Rack
 {
@@ -47,12 +48,15 @@ static std::mutex GRackMutex;
 static std::string GLastMduError;
 static std::map<int, std::vector<float>> GModuleScopeInputs;
 static std::map<int, std::vector<float>> GModuleScopeOutputs;
+static bool GShowDebugConsole = false;
 
 void MainWindow();
 void CleanUp();
 void Render();
 
+void Debug();
 void DrawRackEditor(Rack &rack);
+void DrawTopBar();
 void DrawLinks(Rack &rack);
 void CreateLinks(Rack &rack);
 void DrawModuleDetails();
@@ -260,63 +264,7 @@ int main()
 
         std::lock_guard<std::mutex> rackLock(GRackMutex);
 
-        if (ImGui::BeginMainMenuBar())
-        {
-            if (ImGui::BeginMenu("Rack"))
-            {
-                if (ImGui::MenuItem("Add Rack"))
-                {
-                    CreateRack(std::string("Rack ") + std::to_string(NextRackID));
-                }
-                if (ImGui::BeginMenu("Remove Rack"))
-                {
-                    if (Racks.empty())
-                    {
-                        ImGui::TextDisabled("No racks to remove");
-                    }
-                    else
-                    {
-                        int rackIDToDelete = -1;
-                        for (const auto &rack : Racks)
-                        {
-                            std::string label = "Rack #" + std::to_string(rack.ID) + ": " + rack.Name;
-                            if (ImGui::MenuItem(label.c_str()))
-                            {
-                                rackIDToDelete = rack.ID;
-                            }
-                        }
-                        if (rackIDToDelete != -1)
-                        {
-                            DeleteRack(rackIDToDelete);
-                        }
-                    }
-                    ImGui::EndMenu();
-                }
-
-                ImGui::EndMenu();
-            }
-
-            if (ImGui::BeginMenu("Modules"))
-            {
-                if (ImGui::BeginMenu("Add Module to Selected Rack"))
-                {
-                    Rack *selectedRack = FindRackByID(SelectedRackID);
-                    if (selectedRack == nullptr)
-                    {
-                        ImGui::TextDisabled("Select a Rack First");
-                    }
-                    else
-                    {
-                        DrawAvailableModulesChild(*selectedRack);
-                    }
-
-                    ImGui::EndMenu();
-                }
-                ImGui::EndMenu();
-            }
-
-            ImGui::EndMainMenuBar();
-        }
+        DrawTopBar();
 
         ImGuiViewport *mainViewport = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(mainViewport->WorkPos);
@@ -347,23 +295,6 @@ int main()
             if (ImGui::IsItemClicked())
             {
                 SelectedRackID = rack.ID;
-            }
-
-            ImGui::SameLine();
-            bool shouldDelete = ImGui::Button("Del##rack", ImVec2(50, 0));
-
-            if (shouldDelete)
-            {
-                if (rackOpen)
-                {
-                    ImGui::TreePop();
-                }
-                int rackIDToDelete = rack.ID;
-                auto nextRackIt = std::next(rackIt);
-                DeleteRack(rackIDToDelete);
-                rackIt = nextRackIt;
-                ImGui::PopID();
-                continue;
             }
 
             if (rackOpen)
@@ -409,10 +340,151 @@ int main()
 
 // --Draw--
 
+void DrawTopBar()
+{
+
+    if (ImGui::BeginMainMenuBar())
+    {
+        if (ImGui::BeginMenu("Rack"))
+        {
+            if (ImGui::MenuItem("Add Rack"))
+            {
+                CreateRack(std::string("Rack ") + std::to_string(NextRackID));
+            }
+            if (ImGui::BeginMenu("Remove Rack"))
+            {
+                if (Racks.empty())
+                {
+                    ImGui::TextDisabled("No racks to remove");
+                }
+                else
+                {
+                    int rackIDToDelete = -1;
+                    for (const auto &rack : Racks)
+                    {
+                        std::string label = "Rack #" + std::to_string(rack.ID) + ": " + rack.Name;
+                        if (ImGui::MenuItem(label.c_str()))
+                        {
+                            rackIDToDelete = rack.ID;
+                        }
+                    }
+                    if (rackIDToDelete != -1)
+                    {
+                        DeleteRack(rackIDToDelete);
+                    }
+                }
+                ImGui::EndMenu();
+            }
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Modules"))
+        {
+            if (ImGui::BeginMenu("Add Module to Selected Rack"))
+            {
+                Rack *selectedRack = FindRackByID(SelectedRackID);
+                if (selectedRack == nullptr)
+                {
+                    ImGui::TextDisabled("Select a Rack First");
+                }
+                else
+                {
+                    DrawAvailableModulesChild(*selectedRack);
+                }
+                ImGui::EndMenu();
+            }
+            ImGui::EndMenu();
+        }
+        if (ImGui::BeginMenu("Help"))
+        {
+            if (ImGui::MenuItem("Documentation"))
+            {
+                std::filesystem::path docPath = std::filesystem::current_path() / "docs" / "index.html";
+                if (std::filesystem::exists(docPath))
+                {
+                    std::string command = "xdg-open " + docPath.string();
+                    std::system(command.c_str());
+                }
+            }
+            if (ImGui::MenuItem("GitHub Repository"))
+            {
+                std::string command = "xdg-open https://github.com/Slsickslider1967/Signal";
+                std::system(command.c_str());
+            }
+            ImGui::Separator();
+            if (ImGui::MenuItem("Console"))
+            {
+                GShowDebugConsole = true;
+            }
+
+            ImGui::EndMenu();
+        }
+        ImGui::EndMainMenuBar();
+    }
+
+    Debug();
+}
+
+void Debug()
+{
+    if (!GShowDebugConsole)
+    {
+        return;
+    }
+
+    ImGui::SetNextWindowSize(ImVec2(900, 420), ImGuiCond_FirstUseEver);
+    ImGui::Begin("Debug Console", &GShowDebugConsole);
+
+    ImGui::InputText("Command", Console::CommandBuffer(), Console::CommandBufferSize());
+    ImGui::SameLine();
+
+    if (!Console::IsRunning())
+    {
+        if (ImGui::Button("Run"))
+        {
+            Console::StartConsoleCommand(Console::CommandBuffer());
+        }
+    }
+    else
+    {
+        ImGui::BeginDisabled();
+        ImGui::Button("Running...");
+        ImGui::EndDisabled();
+    }
+
+    ImGui::SameLine();
+    if (ImGui::Button("Clear Output"))
+    {
+        Console::ClearConsoleOutput();
+    }
+
+    ImGui::SameLine();
+    ImGui::Checkbox("Auto-scroll", Console::AutoScrollFlag());
+
+    ImGui::Separator();
+
+    if (ImGui::BeginChild("ConsoleOutput", ImVec2(0, 0), true, ImGuiWindowFlags_HorizontalScrollbar))
+    {
+        std::vector<std::string> lines = Console::GetConsoleLinesSnapshot();
+        for (const std::string &line : lines)
+        {
+            ImGui::TextUnformatted(line.c_str());
+        }
+
+        if (*Console::AutoScrollFlag() && ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 10.0f)
+        {
+            ImGui::SetScrollHereY(1.0f);
+        }
+    }
+    ImGui::EndChild();
+
+    ImGui::End();
+}
+
 void MainWindow()
 {
     setenv("PREFER_X11", "1", 1);
-    Window::CreateWindow(1280, 720, "Signal Handler");
+    Window::CreateWindow(12850, 720, "Signal Handler");
+    Console::AppendConsoleLine("Window initialized: Signal Handler (12850x720)");
     SetupAudioHandling();
     Window::PollEvents();
 }
@@ -922,11 +994,6 @@ void DrawModuleDetails()
                 }
                 if (peakOut > 1.0f)
                     peakOut = 1.0f;
-                ImGui::Text("Output Meter");
-                ImGui::ProgressBar(peakOut, ImVec2(-1.0f, 12.0f));
-
-                ImGuiUtil::PlotSignal(inputIt->second.data(), static_cast<int>(inputIt->second.size()), "Input Trace");
-                ImGuiUtil::PlotSignal(outputIt->second.data(), static_cast<int>(outputIt->second.size()), "Output Trace");
             }
         }
     }
@@ -940,6 +1007,7 @@ void DrawModuleDetails()
 
     if (requestRemove)
     {
+        Console::AppendConsoleLine("Remove Module clicked for module #" + std::to_string(selectedModule->ID) + " (" + selectedModule->Name + ")");
         RemoveNode(selectedModule->ID);
         SelectedModuleID = -1;
         return;
@@ -1080,6 +1148,7 @@ Rack *CreateRack(const std::string &name)
     newRack.Name = name;
     newRack.Enabled = true;
     Racks.push_back(newRack);
+    Console::AppendConsoleLine("Rack created: '" + newRack.Name + "' (ID #" + std::to_string(newRack.ID) + ")");
     return &Racks.back();
 }
 
@@ -1108,30 +1177,36 @@ bool AddDynamicModuleToRack(Rack &rack, const std::string &sourcePath, std::stri
     auto it = loadedMap.find(sourcePath);
     if (it == loadedMap.end())
     {
+        const std::string message = "Loaded module not found for path: " + sourcePath;
         if (errorOut)
         {
-            *errorOut = "Loaded module not found for path: " + sourcePath;
+            *errorOut = message;
         }
+        Console::AppendConsoleLine("[error] " + message);
         return false;
     }
 
     const auto &loaded = it->second;
     if (loaded.Create == nullptr || loaded.Destroy == nullptr)
     {
+        const std::string message = "Factory functions missing for: " + sourcePath;
         if (errorOut)
         {
-            *errorOut = "Factory functions missing for: " + sourcePath;
+            *errorOut = message;
         }
+        Console::AppendConsoleLine("[error] " + message);
         return false;
     }
 
     MDU::Module *instance = loaded.Create();
     if (instance == nullptr)
     {
+        const std::string message = "Create returned null for: " + sourcePath;
         if (errorOut)
         {
-            *errorOut = "Create returned null for: " + sourcePath;
+            *errorOut = message;
         }
+        Console::AppendConsoleLine("[error] " + message);
         return false;
     }
 
@@ -1146,6 +1221,7 @@ bool AddDynamicModuleToRack(Rack &rack, const std::string &sourcePath, std::stri
     dynamicModule.OutPins = static_cast<int>(loaded.Metadata.OutputPins.size());
 
     rack.DynamicModules.push_back(dynamicModule);
+    Console::AppendConsoleLine("Module '" + dynamicModule.Name + "' added to rack '" + rack.Name + "' (Rack #" + std::to_string(rack.ID) + ")");
     return true;
 }
 
@@ -1346,6 +1422,7 @@ void ProcessMduFileChanges()
         {
             GLastMduError = loadAllError;
             std::cerr << loadAllError << std::endl;
+            Console::AppendConsoleLine("[error] " + loadAllError);
         }
         else
         {
@@ -1371,6 +1448,7 @@ void ProcessMduFileChanges()
             {
                 GLastMduError = error;
                 std::cerr << error << std::endl;
+                Console::AppendConsoleLine("[error] " + error + " (loading " + change.Path + ")");
             }
             else
             {
@@ -1387,6 +1465,7 @@ void ProcessMduFileChanges()
             {
                 GLastMduError = error;
                 std::cerr << error << std::endl;
+                Console::AppendConsoleLine("[error] " + error + " (unloading " + change.Path + ")");
             }
             else
             {

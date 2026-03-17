@@ -5,7 +5,7 @@ ModuleVersion: "1.0.0"
 Author: "Signal"
 
 Input Pins:
-- id: rate_cv, label: "Test In
+- id: rate_cv, label: "Test In"
 
 Output Pins:
 - id: cv_out, label: "Test Out"
@@ -14,4 +14,73 @@ Parameters:
 - id: TestID, label: "Test", type: knob, min: 0.1, max: 20.0, default: 1.0
 */
 
+#include "mdu_api.h"
 
+class TestModule : public MDU::Module
+{
+public:
+	static MDU::MetaData BuildMetadata()
+	{
+		MDU::MetaData metadata;
+		metadata.ModuleName = "Test";
+		metadata.ModuleType = "Test";
+		metadata.ModuleVersion = "1.0.0";
+		metadata.Author = "Signal";
+
+		metadata.InputPins.push_back({"rate_cv", "Test In"});
+		metadata.OutputPins.push_back({"cv_out", "Test Out"});
+		metadata.Parameters.push_back({"TestID", "Test", MDU::ParameterType::Knob, 0.1f, 20.0f, 1.0f, {}});
+
+		return metadata;
+	}
+
+	void Process(const MDU::BufferView &bufferView, float /*value*/) override
+	{
+		if (bufferView.OutputPins.empty() || bufferView.OutputPins[0] == nullptr)
+		{
+			return;
+		}
+
+		const float *input = (bufferView.InputPins.empty() ? nullptr : bufferView.InputPins[0]);
+		float *output = bufferView.OutputPins[0];
+		for (size_t i = 0; i < bufferView.NumberOfSamples; ++i)
+		{
+			output[i] = (input != nullptr) ? input[i] : 0.0f;
+		}
+	}
+
+	void DrawEditor() override {}
+
+	bool SetParameter(const string &parameterID, float outValue) override
+	{
+		if (parameterID != "TestID")
+		{
+			return false;
+		}
+
+		if (outValue < 0.1f)
+			outValue = 0.1f;
+		if (outValue > 20.0f)
+			outValue = 20.0f;
+		TestID = outValue;
+		return true;
+	}
+
+	bool GetParameter(const string &parameterID, float &outValue) override
+	{
+		if (parameterID != "TestID")
+		{
+			return false;
+		}
+
+		outValue = TestID;
+		return true;
+	}
+
+private:
+	float TestID = 1.0f;
+
+};
+
+
+MDU_REGISTER(TestModule)

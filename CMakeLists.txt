@@ -14,20 +14,14 @@ FetchContent_Declare(
 	GIT_REPOSITORY https://github.com/ocornut/imgui.git
 	GIT_TAG docking
 )
-FetchContent_GetProperties(imgui)
-if(NOT imgui_POPULATED)
-	FetchContent_Populate(imgui)
-endif()
+FetchContent_MakeAvailable(imgui)
 
 FetchContent_Declare(
 	implot
 	GIT_REPOSITORY https://github.com/epezent/implot.git
 	GIT_TAG master
 )
-FetchContent_GetProperties(implot)
-if(NOT implot_POPULATED)
-	FetchContent_Populate(implot)
-endif()
+FetchContent_MakeAvailable(implot)
 
 FetchContent_Declare(
 	glad
@@ -69,10 +63,7 @@ FetchContent_Declare(
 	GIT_REPOSITORY https://github.com/altschuler/imgui-knobs.git
 	GIT_TAG 8a43bf7
 )
-FetchContent_GetProperties(imgui_knobs)
-if(NOT imgui_knobs_POPULATED)
-	FetchContent_Populate(imgui_knobs)
-endif()
+FetchContent_MakeAvailable(imgui_knobs)
 
 # ---------- External dependency targets ----------
 
@@ -122,6 +113,7 @@ add_executable(Signals
 	src/Functions/Audio.cpp
 	src/Functions/CV.cpp
 	src/Functions/WaveForm.cpp
+	src/Functions/ConsoleHandling.cpp
 )
 
 target_include_directories(Signals PRIVATE
