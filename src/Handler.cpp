@@ -1,7 +1,9 @@
 #include <algorithm>
 #include <chrono>
 #include <cctype>
+#include <cstdlib>
 #include <filesystem>
+#include <system_error>
 #include <iostream>
 #include <list>
 #include <map>
@@ -76,8 +78,11 @@ void RemoveNode(int nodeID);
 bool PopUpTool(Rack &rack);
 void DrawAvailableModulesChild(Rack &rack);
 Rack *FindRackByID(int rackID);
+void LaunchDefaultFileManager(const std::filesystem::path &path = {});
+std::filesystem::path GetDefaultTemplatePath();
 
 std::vector<std::string> BuildMduRuntimePaths();
+std::vector<std::string> BuildMduPathsFromEnvironment();
 void RemoveLinksForModule(Rack &rack, int moduleID);
 void RemoveDynamicModulesFromAllRacksBySourcePath(const std::string &sourcePath);
 void ProcessMduFileChanges();
@@ -257,6 +262,7 @@ int MakeOutputAttributeID(int moduleID, int pinIndex)
 
 int main()
 {
+    GModuleLoader.SetTemplatePath(GetDefaultTemplatePath().string());
     MainWindow();
 
     while (!Window::ShouldClose())
@@ -397,10 +403,15 @@ void DrawTopBar()
         }
         if (ImGui::BeginMenu("File"))
         {
+            if (ImGui::MenuItem("Open template folder"))
+            {
+                LaunchDefaultFileManager(GModuleLoader.GetTemplatePath());
+            }
             if (ImGui::MenuItem("Create template MDU"))
             {
-                MDU::CreateTemplateMDU();
+                MDU::CreateTemplateMDU(GModuleLoader.GetTemplatePath());
             }
+            ImGui::Separator();
             if (ImGui::BeginMenu("Set MDU Search Paths"))
             {
                     std::string newPath;
@@ -1368,10 +1379,125 @@ Rack *FindRackByID(int rackID)
     return nullptr;
 }
 
+void LaunchDefaultFileManager(const std::filesystem::path &path)
+{
+    std::filesystem::path target = path;
+    if (target.empty())
+    {
+        target = std::filesystem::current_path();
+    }
+
+    std::error_code statusError;
+    if (!std::filesystem::is_directory(target, statusError) || statusError)
+    {
+        target = target.parent_path();
+    }
+
+    if (target.empty())
+    {
+        return;
+    }
+
+    std::string command;
+    #if defined(_WIN32)
+        command = "explorer \"" + target.string() + "\"";
+    #elif defined(__APPLE__)
+        command = "open \"" + target.string() + "\"";
+    #else
+        command = "xdg-open \"" + target.string() + "\"";
+    #endif
+
+    std::system(command.c_str());
+}
+
+std::filesystem::path GetDefaultTemplatePath()
+{
+    const char *home = std::getenv("HOME");
+    if (home != nullptr && *home != '\0')
+    {
+        std::filesystem::path documents = std::filesystem::path(home) / "Documents" / "Signal";
+        std::error_code mkdirError;
+        std::filesystem::create_directories(documents, mkdirError);
+
+        std::error_code existsError;
+        if (!std::filesystem::exists(documents, existsError) || existsError)
+        {
+            return std::filesystem::current_path() / "TemplateModule.mdu";
+        }
+
+        return documents / "TemplateModule.mdu";
+    }
+
+    return std::filesystem::current_path() / "TemplateModule.mdu";
+}
+
 // --mdu handling--
+
+std::vector<std::string> BuildMduPathsFromEnvironment()
+{
+    const char *envValue = std::getenv("SIGNAL_MDU_PATHS");
+    if (envValue == nullptr || *envValue == '\0')
+    {
+        return {};
+    }
+
+    std::vector<std::string> rawPaths;
+    std::string current;
+    for (char Character : std::string(envValue))
+    {
+        if (Character == ':' || Character == ';')
+        {
+            if (!current.empty())
+            {
+                rawPaths.push_back(current);
+                current.clear();
+            }
+        }
+        else
+        {
+            current.push_back(Character);
+        }
+    }
+    if (!current.empty())
+    {
+        rawPaths.push_back(current);
+    }
+
+    std::vector<std::string> resolved;
+    resolved.reserve(rawPaths.size());
+
+    for (const auto &path : rawPaths)
+    {
+        if (path.empty())
+        {
+            continue;
+        }
+
+        std::error_code absError;
+        const std::filesystem::path absolute = std::filesystem::absolute(path, absError);
+        if (absError)
+        {
+            continue;
+        }
+
+        std::error_code existsError;
+        if (std::filesystem::exists(absolute, existsError) && !existsError)
+        {
+            resolved.push_back(absolute.lexically_normal().string());
+        }
+    }
+
+    return resolved;
+}
 
 std::vector<std::string> BuildMduRuntimePaths()
 {
+    const auto environmentPaths = BuildMduPathsFromEnvironment();
+    if (!environmentPaths.empty())
+    {
+        return environmentPaths;
+    }
+
     std::vector<std::string> candidates = {
         "src/Modules",
         "modules",

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <filesystem>
 #include <string>
 #include <unordered_map>
 #include <vector>
@@ -30,6 +31,8 @@ namespace MDU
 		void SetSearchPaths(const std::vector<std::string>& paths);
 		void AddSearchPath(const std::string& path);
 		const std::vector<std::string>& GetSearchPaths() const;
+		void SetTemplatePath(const std::string& path);
+		std::filesystem::path GetTemplatePath() const;
 
 		std::vector<std::string> DiscoverMduFiles() const;
 
@@ -45,6 +48,7 @@ namespace MDU
 		std::string CacheDirectory;
 		std::vector<std::string> SearchPaths;
 		std::unordered_map<std::string, LoadedModule> LoadedModulesByPath;
+		std::filesystem::path TemplatePath;
 
 		bool EnsureCacheDirectory(std::string* errorOut) const;
 		std::string BuildSharedObjectPath(const std::string& mduPath) const;

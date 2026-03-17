@@ -8,7 +8,7 @@
 
 namespace MDU
 {
-    void CreateTemplateMDU()
+    void CreateTemplateMDU(const std::filesystem::path &targetPath)
     {
         std::string templateContent =
         R"MDU(
@@ -100,7 +100,9 @@ namespace MDU
         MDU_REGISTER(TemplateModule)
         )MDU";
 
-        std::filesystem::path outputPath = std::filesystem::current_path() / "TemplateModule.mdu";
+        std::filesystem::path outputPath = targetPath.empty()
+            ? std::filesystem::current_path() / "TemplateModule.mdu"
+            : targetPath;
         std::ofstream outFile(outputPath);
         if (outFile)      
         {

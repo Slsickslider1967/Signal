@@ -4,6 +4,7 @@
 #include <dlfcn.h>
 #include <filesystem>
 #include <sstream>
+#include <system_error>
 
 namespace
 {
@@ -303,5 +304,24 @@ namespace MDU
 		}
 
 		return true;
+	}
+
+	void ModuleLoader::SetTemplatePath(const std::string& path)
+	{
+		std::error_code errorCode;
+		const std::filesystem::path absolutePath = std::filesystem::absolute(path, errorCode);
+		if (errorCode)
+		{
+			TemplatePath = std::filesystem::path(path);
+		}
+		else
+		{
+			TemplatePath = absolutePath.lexically_normal();
+		}
+	}
+
+	std::filesystem::path ModuleLoader::GetTemplatePath() const
+	{
+		return TemplatePath;
 	}
 }

@@ -1,6 +1,8 @@
-#pragma once 
+#pragma once
+
+#include <filesystem>
 
 namespace MDU
 {
-    void CreateTemplateMDU();
+    void CreateTemplateMDU(const std::filesystem::path &targetPath = {});
 }
