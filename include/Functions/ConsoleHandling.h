@@ -6,7 +6,6 @@
 namespace Console
 {
     void AppendConsoleLine(const std::string &line);
-    void StartConsoleCommand(const std::string &command);
     void ClearConsoleOutput();
     bool IsRunning();
     char *CommandBuffer();

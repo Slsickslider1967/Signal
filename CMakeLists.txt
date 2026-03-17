@@ -114,6 +114,7 @@ add_executable(Signals
 	src/Functions/CV.cpp
 	src/Functions/WaveForm.cpp
 	src/Functions/ConsoleHandling.cpp
+	src/MDU/CreateMDU.cpp
 )
 
 target_include_directories(Signals PRIVATE

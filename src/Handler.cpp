@@ -24,6 +24,7 @@
 #include "../include/MDU/FileWatcher.h"
 #include "../include/MDU/ModuleLoader.h"
 #include "../include/Functions/ConsoleHandling.h"
+#include "../include/MDU/CreateMDU.h"
 
 struct Rack
 {
@@ -394,6 +395,45 @@ void DrawTopBar()
             }
             ImGui::EndMenu();
         }
+        if (ImGui::BeginMenu("File"))
+        {
+            if (ImGui::MenuItem("Create template MDU"))
+            {
+                MDU::CreateTemplateMDU();
+            }
+            if (ImGui::BeginMenu("Set MDU Search Paths"))
+            {
+                    std::string newPath;
+                    if (ImGui::InputText("New Path", &newPath, ImGuiInputTextFlags_EnterReturnsTrue))
+                    {                       
+                        if (!newPath.empty())
+                        {           
+                            GModuleLoader.AddSearchPath(newPath);
+                        }
+                        else
+                        {
+                            Console::AppendConsoleLine("[warning] Cannot add empty path to MDU search paths.");
+                        }
+                    }
+                    ImGui::Separator();
+                    const auto &searchPaths = GModuleLoader.GetSearchPaths();
+                    if (searchPaths.empty())
+                    {
+                        ImGui::TextDisabled("No search paths set");
+                    }
+                    else
+                    {
+                        for (const auto &path : searchPaths)
+                        {
+                            ImGui::Text("%s", path.c_str());
+                        }
+                    }
+                    ImGui::EndMenu();
+        
+            }
+            ImGui::EndMenu();
+
+        }
         if (ImGui::BeginMenu("Help"))
         {
             if (ImGui::MenuItem("Documentation"))
@@ -415,7 +455,6 @@ void DrawTopBar()
             {
                 GShowDebugConsole = true;
             }
-
             ImGui::EndMenu();
         }
         ImGui::EndMainMenuBar();
@@ -434,22 +473,7 @@ void Debug()
     ImGui::SetNextWindowSize(ImVec2(900, 420), ImGuiCond_FirstUseEver);
     ImGui::Begin("Debug Console", &GShowDebugConsole);
 
-    ImGui::InputText("Command", Console::CommandBuffer(), Console::CommandBufferSize());
     ImGui::SameLine();
-
-    if (!Console::IsRunning())
-    {
-        if (ImGui::Button("Run"))
-        {
-            Console::StartConsoleCommand(Console::CommandBuffer());
-        }
-    }
-    else
-    {
-        ImGui::BeginDisabled();
-        ImGui::Button("Running...");
-        ImGui::EndDisabled();
-    }
 
     ImGui::SameLine();
     if (ImGui::Button("Clear Output"))
