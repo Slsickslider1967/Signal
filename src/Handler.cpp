@@ -449,12 +449,8 @@ void DrawTopBar()
         {
             if (ImGui::MenuItem("Documentation"))
             {
-                std::filesystem::path docPath = std::filesystem::current_path() / "docs" / "index.html";
-                if (std::filesystem::exists(docPath))
-                {
-                    std::string command = "xdg-open " + docPath.string();
-                    std::system(command.c_str());
-                }
+                std::string command = "xdg-open https://github.com/Slsickslider1967/Signal/wiki";
+                std::system(command.c_str());     
             }
             if (ImGui::MenuItem("GitHub Repository"))
             {

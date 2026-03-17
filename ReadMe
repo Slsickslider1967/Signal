@@ -1,0 +1,53 @@
+Signal
+======
+
+Lightweight modular audio patcher and MDU-based dynamic module loader.
+
+Quick overview
+--------------
+- Loads `.mdu` module definition files at runtime, compiles them to shared objects, and dynamically links them into the app.
+- File-watcher detects added/modified/removed `.mdu` files and (un)loads modules automatically.
+- Uses ImGui/imnodes/implot for the UI and real-time audio via an internal audio callback.
+
+Build
+-----
+This project uses CMake. To build:
+
+```bash
+mkdir -p build && cd build
+cmake ..
+cmake --build .
+```
+
+Run
+---
+After building the executable (`Signals` in the `build` folder), run the binary. You may want to set the module search paths via environment variable before launching:
+
+```bash
+export SIGNAL_MDU_PATHS=/path/to/your/modules:/another/path
+./build/Signals
+```
+
+MDU template & default path
+---------------------------
+- The app can create a template `.mdu` file from the **File → Create template MDU** menu.
+- By default the template will be written to `~/Documents/Signal/TemplateModule.mdu` when available; the app falls back to the current working directory otherwise.
+- You can configure a custom template target with **File → Set MDU template path** and open the folder with **File → Open template folder**.
+
+Searching for modules
+---------------------
+- At startup the app searches candidate runtime folders for `.mdu` files. To override the search list, set the `SIGNAL_MDU_PATHS` environment variable (colon/semicolon separated) or add paths in the **File → Set MDU Search Paths** menu.
+
+Development notes
+-----------------
+- The module loader compiles `.mdu` sources with `g++` at runtime; the compiler must be available.
+- ModuleLoader stores a cache (`build/mdu_cache` by default) for temporary shared objects.
+- Handlers and UI are in `src/Handler.cpp`; MDU tooling is in `src/MDU/` and headers live under `include/MDU/`.
+
+Contributing
+------------
+Contributions welcome. Open an issue or PR on the project repository and include a short description and reproduction steps.
+
+License
+-------
+See the repository root for license info.
