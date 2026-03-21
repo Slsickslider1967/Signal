@@ -1,6 +1,10 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.31)
 
 project(Signals LANGUAGES C CXX)
+
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+message(STATUS "CMake is using Python interpreter: ${Python3_EXECUTABLE}")
+set(PYTHON_EXECUTABLE ${Python3_EXECUTABLE})
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -118,8 +122,10 @@ add_executable(Signals
 	src/Functions/Draw.cpp
 	)
 
-	# Export executable symbols for dlopen modules
-	set_target_properties(Signals PROPERTIES LINK_FLAGS "-Wl,--export-dynamic")
+	# Export executable symbols for dlopen modules (Linux/Unix only)
+	if(NOT WIN32)
+		set_target_properties(Signals PROPERTIES LINK_FLAGS "-Wl,--export-dynamic")
+	endif()
 
 target_include_directories(Signals PRIVATE
 	${CMAKE_SOURCE_DIR}/include
@@ -139,7 +145,10 @@ target_link_libraries(Signals PRIVATE
 	OpenGL::GL
 	SDL2::SDL2
 	glad_gl_core_33
-	dl
 )
+if(NOT WIN32)
+	target_link_libraries(Signals PRIVATE dl)
+endif()
+
 
 add_dependencies(Signals glad_gl_core_33)

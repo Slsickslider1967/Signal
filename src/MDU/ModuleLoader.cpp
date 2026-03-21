@@ -1,7 +1,17 @@
 #include "MDU/ModuleLoader.h"
 
 #include <cstdlib>
+#if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#else
 #include <dlfcn.h>
+#endif
 #include <filesystem>
 #include <sstream>
 #include <system_error>
@@ -150,48 +160,64 @@ namespace MDU
 			return false;
 		}
 
-		dlerror();
-		void *handle = dlopen(sharedObjectPath.c_str(), RTLD_NOW | RTLD_LOCAL);
-		if (!handle)
-		{
-			const char *dlOpenError = dlerror();
-			if (ErrorOut)
-			{
-				*ErrorOut = "[MLD003] dlopen failed for " + sharedObjectPath + ": " + std::string(dlOpenError ? dlOpenError : "unknown error");
-			}
-			return false;
-		}
-
-		auto createFn = reinterpret_cast<CreateFn>(dlsym(handle, "mdu_create"));
-		auto destroyFn = reinterpret_cast<DestroyFn>(dlsym(handle, "mdu_destroy"));
-		auto getMetadataFn = reinterpret_cast<GetMetaDataFn>(dlsym(handle, "mdu_get_metadata"));
-
-		const char *symbolError = dlerror();
-		if (symbolError != nullptr || createFn == nullptr || destroyFn == nullptr || getMetadataFn == nullptr)
-		{
-			if (ErrorOut)
-			{
-				*ErrorOut = "[MLD004] dlsym failed for " + sharedObjectPath + ": expected symbols mdu_create/mdu_destroy/mdu_get_metadata";
-				if (symbolError != nullptr)
-				{
-					*ErrorOut += std::string(" (") + symbolError + ")";
-				}
-			}
-			dlclose(handle);
-			return false;
-		}
-
-		LoadedModule module;
-		module.SourcePath = canonicalPath;
-		module.SharedObjectPath = sharedObjectPath;
-		module.SharedObjectHandle = handle;
-		module.Create = createFn;
-		module.Destroy = destroyFn;
-		module.GetMetaData = getMetadataFn;
-		module.Metadata = parse.metadata;
-
-		LoadedModulesByPath[canonicalPath] = module;
-		return true;
+	#if defined(_WIN32)
+		   HMODULE handle = LoadLibraryA(sharedObjectPath.c_str());
+		   if (!handle) {
+			   if (ErrorOut) {
+				   *ErrorOut = std::string("[MLD003] LoadLibrary failed for ") + sharedObjectPath;
+			   }
+			   return false;
+		   }
+		   auto createFn = reinterpret_cast<CreateFn>(GetProcAddress(handle, "mdu_create"));
+		   auto destroyFn = reinterpret_cast<DestroyFn>(GetProcAddress(handle, "mdu_destroy"));
+		   auto getMetadataFn = reinterpret_cast<GetMetaDataFn>(GetProcAddress(handle, "mdu_get_metadata"));
+		   if (!createFn || !destroyFn || !getMetadataFn) {
+			   if (ErrorOut) {
+				   *ErrorOut = std::string("[MLD004] GetProcAddress failed for ") + sharedObjectPath + ": expected symbols mdu_create/mdu_destroy/mdu_get_metadata";
+			   }
+			   FreeLibrary(handle);
+			   return false;
+		   }
+	#else
+		   dlerror();
+		   void *handle = dlopen(sharedObjectPath.c_str(), RTLD_NOW | RTLD_LOCAL);
+		   if (!handle)
+		   {
+			   const char *dlOpenError = dlerror();
+			   if (ErrorOut)
+			   {
+				   *ErrorOut = "[MLD003] dlopen failed for " + sharedObjectPath + ": " + std::string(dlOpenError ? dlOpenError : "unknown error");
+			   }
+			   return false;
+		   }
+		   auto createFn = reinterpret_cast<CreateFn>(dlsym(handle, "mdu_create"));
+		   auto destroyFn = reinterpret_cast<DestroyFn>(dlsym(handle, "mdu_destroy"));
+		   auto getMetadataFn = reinterpret_cast<GetMetaDataFn>(dlsym(handle, "mdu_get_metadata"));
+		   const char *symbolError = dlerror();
+		   if (symbolError != nullptr || createFn == nullptr || destroyFn == nullptr || getMetadataFn == nullptr)
+		   {
+			   if (ErrorOut)
+			   {
+				   *ErrorOut = "[MLD004] dlsym failed for " + sharedObjectPath + ": expected symbols mdu_create/mdu_destroy/mdu_get_metadata";
+				   if (symbolError != nullptr)
+				   {
+					   *ErrorOut += std::string(" (") + symbolError + ")";
+				   }
+			   }
+			   dlclose(handle);
+			   return false;
+		   }
+	#endif
+		   LoadedModule module;
+		   module.SourcePath = canonicalPath;
+		   module.SharedObjectPath = sharedObjectPath;
+		   module.SharedObjectHandle = handle;
+		   module.Create = createFn;
+		   module.Destroy = destroyFn;
+		   module.GetMetaData = getMetadataFn;
+		   module.Metadata = parse.metadata;
+		   LoadedModulesByPath[canonicalPath] = module;
+		   return true;
 	}
 
 	bool ModuleLoader::UnloadByPath(const std::string &mduPath, std::string *errorOut)
@@ -203,17 +229,31 @@ namespace MDU
 			return true;
 		}
 
-		if (Item->second.SharedObjectHandle != nullptr)
-		{
-			if (dlclose(Item->second.SharedObjectHandle) != 0)
-			{
-				if (errorOut)
-				{
-					*errorOut = "[MLD005] dlclose failed for " + Item->second.SharedObjectPath + ": " + (dlerror() ? dlerror() : "unknown error");
-				}
-				return false;
-			}
-		}
+		#if defined(_WIN32)
+			   if (Item->second.SharedObjectHandle != nullptr)
+			   {
+				   if (!FreeLibrary((HMODULE)Item->second.SharedObjectHandle))
+				   {
+					   if (errorOut)
+					   {
+						   *errorOut = "[MLD005] FreeLibrary failed for " + Item->second.SharedObjectPath;
+					   }
+					   return false;
+				   }
+			   }
+		#else
+			   if (Item->second.SharedObjectHandle != nullptr)
+			   {
+				   if (dlclose(Item->second.SharedObjectHandle) != 0)
+				   {
+					   if (errorOut)
+					   {
+						   *errorOut = "[MLD005] dlclose failed for " + Item->second.SharedObjectPath + ": " + (dlerror() ? dlerror() : "unknown error");
+					   }
+					   return false;
+				   }
+			   }
+		#endif
 
 		LoadedModulesByPath.erase(Item);
 		return true;
@@ -221,14 +261,25 @@ namespace MDU
 
 	void ModuleLoader::UnloadAll()
 	{
-		for (auto Item = LoadedModulesByPath.begin(); Item != LoadedModulesByPath.end();)
-		{
-			if (Item->second.SharedObjectHandle != nullptr)
-			{
-				dlclose(Item->second.SharedObjectHandle);
-			}
-			Item = LoadedModulesByPath.erase(Item);
-		}
+		#if defined(_WIN32)
+			   for (auto Item = LoadedModulesByPath.begin(); Item != LoadedModulesByPath.end();)
+			   {
+				   if (Item->second.SharedObjectHandle != nullptr)
+				   {
+					   FreeLibrary((HMODULE)Item->second.SharedObjectHandle);
+				   }
+				   Item = LoadedModulesByPath.erase(Item);
+			   }
+		#else
+			   for (auto Item = LoadedModulesByPath.begin(); Item != LoadedModulesByPath.end();)
+			   {
+				   if (Item->second.SharedObjectHandle != nullptr)
+				   {
+					   dlclose(Item->second.SharedObjectHandle);
+				   }
+				   Item = LoadedModulesByPath.erase(Item);
+			   }
+		#endif
 	}
 
 	const std::unordered_map<std::string, LoadedModule> &ModuleLoader::GetLoadedModules() const
