@@ -20,6 +20,8 @@ Parameters:
 
 #include <cmath>
 #include "mdu_api.h"
+#include "imgui.h"
+// #include "imgui-knobs.h"
 
 class VCFModule final : public MDU::Module
 {

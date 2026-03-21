@@ -2,11 +2,13 @@
 #include "../../include/Functions/Window.h"
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
+#include <string>
 #include "imgui.h"
 #include "implot.h"
 #include "imnodes.h"
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_opengl3.h"
+#include "../../include/Functions/ConsoleHandling.h"
 
 #include <thread>
 #include <chrono>
@@ -26,11 +28,15 @@ namespace Window
         const char* preferX11 = std::getenv("PREFER_X11");
         if (preferX11 && preferX11[0] != '\0')
         {
-            std::cout << "PREFER_X11 detected — preferring X11 (XWayland) backend" << std::endl;
+            std::string Message = "PREFER_X11 detected — preferring X11 (XWayland) backend";
+            std::cout << Message << std::endl;
+            Console::AppendConsoleLine(Message);
+
             setenv("XDG_SESSION_TYPE", "x11", 1);
             unsetenv("WAYLAND_DISPLAY");
         }
         std::cout << "Creating window: " << Title << " (" << Width << "x" << Height << ")" << std::endl;
+        Console::AppendConsoleLine("Creating window: " + std::string(Title) + " (" + std::to_string(Width) + "x" + std::to_string(Height) + ")");
         const char* hideMain = std::getenv("HIDE_MAIN_WINDOW");
         bool hideMainWindow = (hideMain && hideMain[0] != '\0');
         if (hideMainWindow)
@@ -39,7 +45,9 @@ namespace Window
         }
         if (!glfwInit())
         {
-            std::cerr << "Failed to initialize GLFW" << std::endl;
+            std::string Message = "Failed to initialize GLFW";
+            std::cerr << Message << std::endl;
+            Console::AppendConsoleLine(Message);
         }   
 
         int winW = hideMainWindow ? 1 : Width;
@@ -47,7 +55,9 @@ namespace Window
         s_Window = glfwCreateWindow(winW, winH, Title, NULL, NULL);
         if (!s_Window)
         {
-            std::cerr << "Failed to create GLFW window" << std::endl;
+            std::string Message = "Failed to create GLFW window";
+            std::cerr << Message << std::endl;
+            Console::AppendConsoleLine(Message);
             glfwTerminate();
             return;
         }
@@ -56,17 +66,22 @@ namespace Window
         int glad_ver = gladLoadGL(glfwGetProcAddress);
         if (glad_ver == 0)
         {
+            std::string Message = "Failed to initialize GL loader (glad)";
+            Console::AppendConsoleLine(Message);
             std::cerr << "Failed to initialize GL loader (glad)" << std::endl;
         }
 
         ImGuiInit();
         int should = glfwWindowShouldClose(s_Window);
+        std::string Message = "Window created successfully (initial shouldClose=" + std::to_string(should) + ")";
+        Console::AppendConsoleLine(Message);
         std::cout << "Window created successfully (initial shouldClose=" << should << ")" << std::endl;
     }
 
     void DestroyWindow()
     {
-        std::cout << "Destroying window" << std::endl;
+        std::string Message = "Destroying window";
+        Console::AppendConsoleLine(Message);
         if (s_Window)
         {
             ImGuiShutdown();
@@ -92,18 +107,33 @@ namespace Window
     void ImGuiInit()
     {
         std::cout << "Initializing ImGui" << std::endl;
+        Console::AppendConsoleLine("Initializing ImGui");
 
         const char* wayland = std::getenv("WAYLAND_DISPLAY");
         const char* display = std::getenv("DISPLAY");
         if (wayland && wayland[0] != '\0')
-            std::cout << "Detected Wayland (WAYLAND_DISPLAY=" << wayland << ")" << std::endl;
+        {
+            std::string Message = "Detected Wayland (WAYLAND_DISPLAY=" + std::string(wayland) + ")";
+            std::cout << Message << std::endl;
+            Console::AppendConsoleLine(Message);
+        }
         else if (display && display[0] != '\0')
-            std::cout << "Detected X11 (DISPLAY=" << display << ")" << std::endl;
+        {
+            std::string Message = "Detected X11 (DISPLAY=" + std::string(display) + ")";
+            std::cout << Message << std::endl;
+            Console::AppendConsoleLine(Message);
+        }
         else
-            std::cout << "No Wayland or X11 display detected in environment" << std::endl;
+        {
+            std::string Message = "No Wayland or X11 display detected in environment";
+            std::cout << Message << std::endl;
+            Console::AppendConsoleLine(Message);
+        }
         IMGUI_CHECKVERSION();
         ImGui::CreateContext();
-        ImPlot::CreateContext();        ImNodes::CreateContext();        ImNodes::CreateContext();
+        ImPlot::CreateContext();  
+        ImNodes::CreateContext();        
+        ImNodes::CreateContext();
         ImGuiIO& io = ImGui::GetIO(); (void)io;
 
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;

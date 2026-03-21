@@ -8,7 +8,7 @@
 
 namespace
 {
-	std::string EscapeForShell(const std::string& Text)
+	std::string EscapeForShell(const std::string &Text)
 	{
 		std::string Escaped;
 		Escaped.reserve(Text.size() + 8);
@@ -28,7 +28,7 @@ namespace
 		return "'" + Escaped + "'";
 	}
 
-	std::string MakeAbsolutePath(const std::string& maybeRelative)
+	std::string MakeAbsolutePath(const std::string &maybeRelative)
 	{
 		std::error_code ErrorCode;
 		const std::filesystem::path abs = std::filesystem::absolute(maybeRelative, ErrorCode);
@@ -52,23 +52,23 @@ namespace MDU
 		UnloadAll();
 	}
 
-	void ModuleLoader::SetSearchPaths(const std::vector<std::string>& Paths)
+	void ModuleLoader::SetSearchPaths(const std::vector<std::string> &Paths)
 	{
 		SearchPaths.clear();
 		SearchPaths.reserve(Paths.size());
 
-		for (const auto& Path : Paths)
+		for (const auto &Path : Paths)
 		{
 			SearchPaths.push_back(MakeAbsolutePath(Path));
 		}
 	}
 
-	void ModuleLoader::AddSearchPath(const std::string& Path)
+	void ModuleLoader::AddSearchPath(const std::string &Path)
 	{
 		SearchPaths.push_back(MakeAbsolutePath(Path));
 	}
 
-	const std::vector<std::string>& ModuleLoader::GetSearchPaths() const
+	const std::vector<std::string> &ModuleLoader::GetSearchPaths() const
 	{
 		return SearchPaths;
 	}
@@ -77,7 +77,7 @@ namespace MDU
 	{
 		std::vector<std::string> Files;
 
-		for (const auto& basePath : SearchPaths)
+		for (const auto &basePath : SearchPaths)
 		{
 			std::error_code ErrorCode;
 			if (!std::filesystem::exists(basePath, ErrorCode) || ErrorCode)
@@ -85,7 +85,7 @@ namespace MDU
 				continue;
 			}
 
-			for (const auto& entry : std::filesystem::recursive_directory_iterator(basePath, std::filesystem::directory_options::skip_permission_denied, ErrorCode))
+			for (const auto &entry : std::filesystem::recursive_directory_iterator(basePath, std::filesystem::directory_options::skip_permission_denied, ErrorCode))
 			{
 				if (ErrorCode)
 				{
@@ -107,11 +107,11 @@ namespace MDU
 		return Files;
 	}
 
-	bool ModuleLoader::ScanAndLoadAll(std::string* ErrorOut)
+	bool ModuleLoader::ScanAndLoadAll(std::string *ErrorOut)
 	{
 		const auto Files = DiscoverMduFiles();
 
-		for (const auto& File : Files)
+		for (const auto &File : Files)
 		{
 			if (!LoadFromMduFile(File, ErrorOut))
 			{
@@ -122,7 +122,7 @@ namespace MDU
 		return true;
 	}
 
-	bool ModuleLoader::LoadFromMduFile(const std::string& mduPath, std::string* ErrorOut)
+	bool ModuleLoader::LoadFromMduFile(const std::string &mduPath, std::string *ErrorOut)
 	{
 		const std::string canonicalPath = MakeAbsolutePath(mduPath);
 
@@ -151,10 +151,10 @@ namespace MDU
 		}
 
 		dlerror();
-		void* handle = dlopen(sharedObjectPath.c_str(), RTLD_NOW | RTLD_LOCAL);
+		void *handle = dlopen(sharedObjectPath.c_str(), RTLD_NOW | RTLD_LOCAL);
 		if (!handle)
 		{
-			const char* dlOpenError = dlerror();
+			const char *dlOpenError = dlerror();
 			if (ErrorOut)
 			{
 				*ErrorOut = "[MLD003] dlopen failed for " + sharedObjectPath + ": " + std::string(dlOpenError ? dlOpenError : "unknown error");
@@ -166,7 +166,7 @@ namespace MDU
 		auto destroyFn = reinterpret_cast<DestroyFn>(dlsym(handle, "mdu_destroy"));
 		auto getMetadataFn = reinterpret_cast<GetMetaDataFn>(dlsym(handle, "mdu_get_metadata"));
 
-		const char* symbolError = dlerror();
+		const char *symbolError = dlerror();
 		if (symbolError != nullptr || createFn == nullptr || destroyFn == nullptr || getMetadataFn == nullptr)
 		{
 			if (ErrorOut)
@@ -194,7 +194,7 @@ namespace MDU
 		return true;
 	}
 
-	bool ModuleLoader::UnloadByPath(const std::string& mduPath, std::string* errorOut)
+	bool ModuleLoader::UnloadByPath(const std::string &mduPath, std::string *errorOut)
 	{
 		const std::string canonicalPath = MakeAbsolutePath(mduPath);
 		const auto Item = LoadedModulesByPath.find(canonicalPath);
@@ -231,7 +231,7 @@ namespace MDU
 		}
 	}
 
-	const std::unordered_map<std::string, LoadedModule>& ModuleLoader::GetLoadedModules() const
+	const std::unordered_map<std::string, LoadedModule> &ModuleLoader::GetLoadedModules() const
 	{
 		return LoadedModulesByPath;
 	}
@@ -241,7 +241,7 @@ namespace MDU
 		std::vector<MetaData> metadata;
 		metadata.reserve(LoadedModulesByPath.size());
 
-		for (const auto& pair : LoadedModulesByPath)
+		for (const auto &pair : LoadedModulesByPath)
 		{
 			metadata.push_back(pair.second.Metadata);
 		}
@@ -249,7 +249,7 @@ namespace MDU
 		return metadata;
 	}
 
-	bool ModuleLoader::EnsureCacheDirectory(std::string* errorOut) const
+	bool ModuleLoader::EnsureCacheDirectory(std::string *errorOut) const
 	{
 		std::error_code ErrorCode;
 		std::filesystem::create_directories(CacheDirectory, ErrorCode);
@@ -264,7 +264,7 @@ namespace MDU
 		return true;
 	}
 
-	std::string ModuleLoader::BuildSharedObjectPath(const std::string& mduPath) const
+	std::string ModuleLoader::BuildSharedObjectPath(const std::string &mduPath) const
 	{
 		std::filesystem::path sourcePath(mduPath);
 		std::filesystem::path fileName = sourcePath.filename();
@@ -276,9 +276,12 @@ namespace MDU
 		return outPath.lexically_normal().string();
 	}
 
-	bool ModuleLoader::CompileMduToSharedObject(const std::string& mduPath, const std::string& sharedObjectPath, std::string* errorOut) const
+	bool ModuleLoader::CompileMduToSharedObject(const std::string &mduPath, const std::string &sharedObjectPath, std::string *errorOut) const
 	{
 		std::ostringstream cmd;
+
+		// This uses the g++ compiler for loading and compiling the MDU files.#
+		// This builds a shared lib and sets the appropriate include paths for the MDU API and ImGui (for editor drawing).
 		cmd << "g++"
 			<< " -shared -fPIC -std=c++17 -x c++"
 			<< " -I" << EscapeForShell("include")
@@ -290,6 +293,11 @@ namespace MDU
 			<< " -I" << EscapeForShell("build/_deps/imgui-src")
 			<< " -I" << EscapeForShell("../build/_deps/imgui-src")
 			<< " -I" << EscapeForShell("_deps/imgui-src")
+			<< " -I" << EscapeForShell("external/imgui_knobs")
+			<< " -I" << EscapeForShell("../external/imgui_knobs")
+			<< " -I" << EscapeForShell("build/_deps/imgui_knobs-src")
+			<< " -I" << EscapeForShell("../build/_deps/imgui_knobs-src")
+			<< " -I" << EscapeForShell("_deps/imgui_knobs-src")
 			<< " " << EscapeForShell(mduPath)
 			<< " -o " << EscapeForShell(sharedObjectPath);
 
@@ -306,7 +314,7 @@ namespace MDU
 		return true;
 	}
 
-	void ModuleLoader::SetTemplatePath(const std::string& path)
+	void ModuleLoader::SetTemplatePath(const std::string &path)
 	{
 		std::error_code errorCode;
 		const std::filesystem::path absolutePath = std::filesystem::absolute(path, errorCode);

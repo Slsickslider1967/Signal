@@ -115,7 +115,11 @@ add_executable(Signals
 	src/Functions/WaveForm.cpp
 	src/Functions/ConsoleHandling.cpp
 	src/MDU/CreateMDU.cpp
-)
+	src/Functions/Draw.cpp
+	)
+
+	# Export executable symbols for dlopen modules
+	set_target_properties(Signals PROPERTIES LINK_FLAGS "-Wl,--export-dynamic")
 
 target_include_directories(Signals PRIVATE
 	${CMAKE_SOURCE_DIR}/include

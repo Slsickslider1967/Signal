@@ -115,8 +115,8 @@ void CaptureScopeSamples(std::map<int, std::vector<float>> &scopeMap,
 }
 
 void DrawScopeOverlay(const std::vector<float> *inputSamples,
-                     const std::vector<float> *outputSamples,
-                     const char *plotLabel)
+                      const std::vector<float> *outputSamples,
+                      const char *plotLabel)
 {
     if (inputSamples == nullptr || outputSamples == nullptr)
     {
@@ -414,43 +414,41 @@ void DrawTopBar()
             ImGui::Separator();
             if (ImGui::BeginMenu("Set MDU Search Paths"))
             {
-                    std::string newPath;
-                    if (ImGui::InputText("New Path", &newPath, ImGuiInputTextFlags_EnterReturnsTrue))
-                    {                       
-                        if (!newPath.empty())
-                        {           
-                            GModuleLoader.AddSearchPath(newPath);
-                        }
-                        else
-                        {
-                            Console::AppendConsoleLine("[warning] Cannot add empty path to MDU search paths.");
-                        }
-                    }
-                    ImGui::Separator();
-                    const auto &searchPaths = GModuleLoader.GetSearchPaths();
-                    if (searchPaths.empty())
+                std::string newPath;
+                if (ImGui::InputText("New Path", &newPath, ImGuiInputTextFlags_EnterReturnsTrue))
+                {
+                    if (!newPath.empty())
                     {
-                        ImGui::TextDisabled("No search paths set");
+                        GModuleLoader.AddSearchPath(newPath);
                     }
                     else
                     {
-                        for (const auto &path : searchPaths)
-                        {
-                            ImGui::Text("%s", path.c_str());
-                        }
+                        Console::AppendConsoleLine("[warning] Cannot add empty path to MDU search paths.");
                     }
-                    ImGui::EndMenu();
-        
+                }
+                ImGui::Separator();
+                const auto &searchPaths = GModuleLoader.GetSearchPaths();
+                if (searchPaths.empty())
+                {
+                    ImGui::TextDisabled("No search paths set");
+                }
+                else
+                {
+                    for (const auto &path : searchPaths)
+                    {
+                        ImGui::Text("%s", path.c_str());
+                    }
+                }
+                ImGui::EndMenu();
             }
             ImGui::EndMenu();
-
         }
         if (ImGui::BeginMenu("Help"))
         {
             if (ImGui::MenuItem("Documentation"))
             {
                 std::string command = "xdg-open https://github.com/Slsickslider1967/Signal/wiki";
-                std::system(command.c_str());     
+                std::system(command.c_str());
             }
             if (ImGui::MenuItem("GitHub Repository"))
             {
@@ -843,189 +841,33 @@ void DrawModuleDetails()
         const std::string moduleTypeLower = toLowerCopy(selectedModule->Metadata.ModuleType);
         const std::string moduleNameLower = toLowerCopy(selectedModule->Metadata.ModuleName);
 
-        if (selectedModule->Instance != nullptr)
+        selectedModule->Instance->DrawEditor();
+
+        ImGui::Spacing();
+        ImGui::Separator();
+        ImGui::Text("Signal Scope");
+        auto inputIt = GModuleScopeInputs.find(selectedModule->ID);
+        auto outputIt = GModuleScopeOutputs.find(selectedModule->ID);
+
+        if (inputIt == GModuleScopeInputs.end() || outputIt == GModuleScopeOutputs.end())
         {
-            if (moduleTypeLower.find("oscillator") != std::string::npos || moduleNameLower == "vco")
+            ImGui::TextDisabled("No scope data yet. Start audio and run the patch.");
+        }
+        else
+        {
+            DrawScopeOverlay(&inputIt->second, &outputIt->second, "Input vs Output");
+
+            float peakOut = 0.0f;
+            for (float sample : outputIt->second)
             {
-                ImGui::Text("TUNING");
-                if (ImGui::BeginTable("VCO_TUNING_ROW", 3, ImGuiTableFlags_SizingStretchSame))
+                float amplitude = sample < 0.0f ? -sample : sample;
+                if (amplitude > peakOut)
                 {
-                    ImGui::TableNextColumn();
-                    drawKnobByID("frequency", "FREQ", 440.0f, 20.0f, 2000.0f, 0.1f, "%.1f Hz", ImGuiKnobVariant_WiperDot, ImGuiKnobFlags_Logarithmic | ImGuiKnobFlags_NoTitle);
-
-                    ImGui::TableNextColumn();
-                    drawKnobByID("fm_depth", "FM DEPTH", 0.0f, 0.0f, 1.0f, 0.01f, "%.2f", ImGuiKnobVariant_Wiper);
-
-                    ImGui::TableNextColumn();
-                    drawKnobByID("amplitude", "OUTPUT LVL", 0.8f, 0.0f, 1.0f, 0.01f, "%.2f", ImGuiKnobVariant_Wiper);
-
-                    ImGui::EndTable();
-                }
-
-                drawSteppedButtons("wave_type", "WAVEFORM");
-            }
-            else if (moduleNameLower == "lfo")
-            {
-                ImGui::Text("RATE");
-                if (ImGui::BeginTable("LFO_RATE_ROW", 2, ImGuiTableFlags_SizingStretchSame))
-                {
-                    ImGui::TableNextColumn();
-                    drawKnobByID("rate_hz", "FREQ", 1.0f, 0.1f, 20.0f, 0.01f, "%.2f Hz", ImGuiKnobVariant_Wiper);
-
-                    ImGui::TableNextColumn();
-                    drawKnobByID("amount", "LEVEL", 0.5f, 0.0f, 1.0f, 0.01f, "%.2f", ImGuiKnobVariant_Wiper);
-                    ImGui::EndTable();
-                }
-
-                drawSteppedButtons("wave_type", "WAVE SHAPE");
-            }
-            else if (moduleNameLower == "vcf" || moduleTypeLower.find("filter") != std::string::npos)
-            {
-                drawSteppedButtons("filter_type", "FILTER TYPE");
-                ImGui::Text("CUTOFF / RESONANCE");
-                if (ImGui::BeginTable("VCF_MAIN_ROW", 2, ImGuiTableFlags_SizingStretchSame))
-                {
-                    ImGui::TableNextColumn();
-                    drawKnobByID("cutoff_hz", "CUTOFF", 1000.0f, 20.0f, 20000.0f, 20.0f, "%.1f Hz", ImGuiKnobVariant_WiperDot, ImGuiKnobFlags_Logarithmic | ImGuiKnobFlags_NoTitle);
-
-                    ImGui::TableNextColumn();
-                    drawKnobByID("resonance", "RESONANCE", 0.5f, 0.0f, 1.0f, 0.01f, "%.2f", ImGuiKnobVariant_Wiper);
-                    ImGui::EndTable();
+                    peakOut = amplitude;
                 }
             }
-            else if (moduleNameLower == "vca" || moduleTypeLower.find("amplifier") != std::string::npos)
-            {
-                ImGui::Text("AMPLIFIER");
-                if (ImGui::BeginTable("VCA_AMP_ROW", 2, ImGuiTableFlags_SizingStretchSame))
-                {
-                    ImGui::TableNextColumn();
-                    drawKnobByID("base_gain", "GAIN", 0.8f, 0.0f, 1.0f, 0.01f, "%.2f", ImGuiKnobVariant_Wiper);
-
-                    ImGui::TableNextColumn();
-                    drawKnobByID("cv_amount", "CV AMT", 0.5f, 0.0f, 1.0f, 0.01f, "%.2f", ImGuiKnobVariant_Wiper);
-                    ImGui::EndTable();
-                }
-
-                ImGui::Text("RANGE");
-                if (ImGui::BeginTable("VCA_RANGE_ROW", 2, ImGuiTableFlags_SizingStretchSame))
-                {
-                    ImGui::TableNextColumn();
-                    drawKnobByID("range_min", "MIN", 0.0f, 0.0f, 1.0f, 0.01f, "%.2f", ImGuiKnobVariant_Wiper);
-
-                    ImGui::TableNextColumn();
-                    drawKnobByID("range_max", "MAX", 1.0f, 0.0f, 1.0f, 0.01f, "%.2f", ImGuiKnobVariant_Wiper);
-                    ImGui::EndTable();
-                }
-            }
-            else if (moduleNameLower == "output" || moduleTypeLower == "output")
-            {
-                ImGui::Text("MASTER OUTPUT");
-                if (ImGui::BeginTable("OUT_ROW", 3, ImGuiTableFlags_SizingStretchSame))
-                {
-                    ImGui::TableNextColumn();
-                    ImGui::TableNextColumn();
-                    drawKnobByID("output_level", "LEVEL", 0.8f, 0.0f, 1.0f, 0.01f, "%.2f", ImGuiKnobVariant_WiperDot);
-                    ImGui::TableNextColumn();
-                    ImGui::EndTable();
-                }
-
-                float outputLevel = getParameter("output_level", 0.8f);
-                if (outputLevel < 0.0f)
-                    outputLevel = 0.0f;
-                if (outputLevel > 1.0f)
-                    outputLevel = 1.0f;
-                ImGui::Text("Signal to DAC");
-                ImGui::ProgressBar(outputLevel, ImVec2(-1.0f, 12.0f));
-            }
-            else
-            {
-                if (ImGui::BeginTable("FallbackParamTable", 2, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV))
-                {
-                    ImGui::TableSetupColumn("Label", ImGuiTableColumnFlags_WidthFixed, 150.0f);
-                    ImGui::TableSetupColumn("Control", ImGuiTableColumnFlags_WidthStretch);
-
-                    for (const auto &parameter : selectedModule->Metadata.Parameters)
-                    {
-                        float value = parameter.defaultValue;
-                        selectedModule->Instance->GetParameter(parameter.ID, value);
-
-                        ImGui::PushID(parameter.ID.c_str());
-                        ImGui::TableNextRow();
-                        ImGui::TableSetColumnIndex(0);
-                        ImGui::TextUnformatted((parameter.label.empty() ? parameter.ID : parameter.label).c_str());
-                        ImGui::TableSetColumnIndex(1);
-
-                        if (parameter.type == MDU::ParameterType::Toggle)
-                        {
-                            bool boolValue = (value >= 0.5f);
-                            if (ImGui::Checkbox("##toggle", &boolValue))
-                            {
-                                setParameterClamped(parameter.ID, boolValue ? 1.0f : 0.0f);
-                            }
-                        }
-                        else if ((parameter.type == MDU::ParameterType::Combo || parameter.type == MDU::ParameterType::Stepped) && !parameter.options.empty())
-                        {
-                            int optionIndex = static_cast<int>(value);
-                            if (optionIndex < 0)
-                                optionIndex = 0;
-                            if (optionIndex >= static_cast<int>(parameter.options.size()))
-                                optionIndex = static_cast<int>(parameter.options.size()) - 1;
-
-                            std::vector<const char *> items;
-                            items.reserve(parameter.options.size());
-                            for (const auto &option : parameter.options)
-                            {
-                                items.push_back(option.c_str());
-                            }
-
-                            if (ImGui::Combo("##combo", &optionIndex, items.data(), static_cast<int>(items.size())))
-                            {
-                                setParameterClamped(parameter.ID, static_cast<float>(optionIndex));
-                            }
-                        }
-                        else
-                        {
-                            if (ImGui::SliderFloat("##slider", &value, parameter.minValue, parameter.maxValue, "%.3f"))
-                            {
-                                setParameterClamped(parameter.ID, value);
-                            }
-                        }
-
-                        ImGui::PopID();
-                    }
-
-                    ImGui::EndTable();
-                }
-            }
-
-            selectedModule->Instance->DrawEditor();
-
-            ImGui::Spacing();
-            ImGui::Separator();
-            ImGui::Text("Signal Scope");
-            auto inputIt = GModuleScopeInputs.find(selectedModule->ID);
-            auto outputIt = GModuleScopeOutputs.find(selectedModule->ID);
-
-            if (inputIt == GModuleScopeInputs.end() || outputIt == GModuleScopeOutputs.end())
-            {
-                ImGui::TextDisabled("No scope data yet. Start audio and run the patch.");
-            }
-            else
-            {
-                DrawScopeOverlay(&inputIt->second, &outputIt->second, "Input vs Output");
-
-                float peakOut = 0.0f;
-                for (float sample : outputIt->second)
-                {
-                    float amplitude = sample < 0.0f ? -sample : sample;
-                    if (amplitude > peakOut)
-                    {
-                        peakOut = amplitude;
-                    }
-                }
-                if (peakOut > 1.0f)
-                    peakOut = 1.0f;
-            }
+            if (peakOut > 1.0f)
+                peakOut = 1.0f;
         }
     }
 
@@ -1251,6 +1093,7 @@ bool AddDynamicModuleToRack(Rack &rack, const std::string &sourcePath, std::stri
     dynamicModule.InPins = static_cast<int>(loaded.Metadata.InputPins.size());
     dynamicModule.OutPins = static_cast<int>(loaded.Metadata.OutputPins.size());
 
+    Console::AppendConsoleLine("Creating dynamic module: '" + dynamicModule.Name + "' (ID #" + std::to_string(dynamicModule.ID) + ")");
     rack.DynamicModules.push_back(dynamicModule);
     Console::AppendConsoleLine("Module '" + dynamicModule.Name + "' added to rack '" + rack.Name + "' (Rack #" + std::to_string(rack.ID) + ")");
     return true;
@@ -1278,8 +1121,7 @@ void RemoveNode(int nodeID)
                                           }
 
                                           RemoveDynamicModuleFromRack(module);
-                                          return true;
-                                      });
+                                          return true; });
 
         rack.Links.erase(
             std::remove_if(rack.Links.begin(), rack.Links.end(),
@@ -1395,13 +1237,13 @@ void LaunchDefaultFileManager(const std::filesystem::path &path)
     }
 
     std::string command;
-    #if defined(_WIN32)
-        command = "explorer \"" + target.string() + "\"";
-    #elif defined(__APPLE__)
-        command = "open \"" + target.string() + "\"";
-    #else
-        command = "xdg-open \"" + target.string() + "\"";
-    #endif
+#if defined(_WIN32)
+    command = "explorer \"" + target.string() + "\"";
+#elif defined(__APPLE__)
+    command = "open \"" + target.string() + "\"";
+#else
+    command = "xdg-open \"" + target.string() + "\"";
+#endif
 
     std::system(command.c_str());
 }
@@ -1550,8 +1392,7 @@ void RemoveDynamicModulesFromAllRacksBySourcePath(const std::string &sourcePath)
                                           int removedModuleID = module.ID;
                                           RemoveDynamicModuleFromRack(module);
                                           RemoveLinksForModule(rack, removedModuleID);
-                                          return true;
-                                      });
+                                          return true; });
     }
 }
 

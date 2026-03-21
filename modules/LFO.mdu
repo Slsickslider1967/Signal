@@ -101,7 +101,10 @@ public:
         }
     }
 
-    void DrawEditor() override {}
+    void DrawEditor() override 
+    {
+        
+    }
 
     bool SetParameter(const string &parameterID, float outValue) override
     {

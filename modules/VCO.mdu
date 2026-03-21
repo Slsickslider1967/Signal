@@ -22,6 +22,11 @@ Parameters:
 
 #include <cmath>
 #include "mdu_api.h"
+#include "imgui.h"
+#include "imgui-knobs.h"
+// #include "imgui_stdlib.h"
+// #include "implot.h"
+// #include "imnodes.h"
 
 class VCOModule final : public MDU::Module
 {
@@ -39,11 +44,6 @@ public:
         metadata.InputPins.push_back({"pwm_in", "PWM"});
         metadata.InputPins.push_back({"sync_in", "Sync"});
         metadata.OutputPins.push_back({"audio_out", "Audio Out"});
-
-        metadata.Parameters.push_back({"frequency", "Frequency", MDU::ParameterType::Knob, 20.0f, 2000.0f, 440.0f, {}});
-        metadata.Parameters.push_back({"amplitude", "Amplitude", MDU::ParameterType::Knob, 0.0f, 1.0f, 0.8f, {}});
-        metadata.Parameters.push_back({"fm_depth", "FM Depth", MDU::ParameterType::Knob, 0.0f, 1.0f, 0.0f, {}});
-        metadata.Parameters.push_back({"wave_type", "Wave Type", MDU::ParameterType::Stepped, 0.0f, 5.0f, 0.0f, {"Sine", "Square", "Saw", "Tri", "Pulse", "Noise"}});
 
         return metadata;
     }
@@ -118,7 +118,18 @@ public:
         }
     }
 
-    void DrawEditor() override {}
+    void DrawEditor() override 
+    {
+        ImGui::PushID(this);
+            if (ImGui::SliderFloat("Frequency", &Frequency, 20.0f, 2000.0f, "%.1f Hz")) {}
+            if (ImGui::SliderFloat("Amplitude", &Amplitude, 0.0f, 1.0f, "%.2f")) {}
+            const char* items[] = {"Sine","Square","Saw","Tri","Pulse","Noise"};
+            int w = WaveType;
+            if (ImGui::Combo("Wave", &w, items, IM_ARRAYSIZE(items))) {
+                WaveType = w;
+            }
+        ImGui::PopID();
+    }
 
     bool SetParameter(const string &parameterID, float outValue) override
     {
