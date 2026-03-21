@@ -81,6 +81,7 @@ add_library(imgui STATIC
 	${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
 	${imgui_SOURCE_DIR}/misc/cpp/imgui_stdlib.cpp
 )
+target_include_directories(imgui PRIVATE ${CMAKE_BINARY_DIR}/_deps/glfw-src/include)
 target_include_directories(imgui PUBLIC
 	${imgui_SOURCE_DIR}
 	${imgui_SOURCE_DIR}/backends
