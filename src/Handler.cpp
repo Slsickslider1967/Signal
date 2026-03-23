@@ -515,8 +515,6 @@ void MainWindow()
 {
     #if (defined(__linux__) || defined(__unix__) || defined(__APPLE__))
         setenv("PREFER_X11", "1", 1);
-    #else
-        // Windows-specific initialization if needed
     #endif
     Window::CreateWindow(12850, 720, "Signal Handler");
     Console::AppendConsoleLine("Window initialized: Signal Handler (12850x720)");
