@@ -13,3 +13,4 @@ html/
 latex/
 *.doxygen
 *.tag
+venv/

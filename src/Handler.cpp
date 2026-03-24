@@ -516,8 +516,10 @@ void MainWindow()
     #if (defined(__linux__) || defined(__unix__) || defined(__APPLE__))
         setenv("PREFER_X11", "1", 1);
     #endif
-    Window::CreateWindow(12850, 720, "Signal Handler");
-    Console::AppendConsoleLine("Window initialized: Signal Handler (12850x720)");
+    int Width = 1020;
+    int Height = 720;
+    Window::CreateWindow(Width, Height, "Signal Handler");
+    Console::AppendConsoleLine("Window initialized: Signal Handler (" + std::to_string(Width) + "x" + std::to_string(Height) + ")");
     SetupAudioHandling();
     Window::PollEvents();
 }

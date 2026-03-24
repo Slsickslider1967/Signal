@@ -2,5 +2,5 @@
 
 namespace Draw
 {
-    void DrawTopBar();
+    void Draw();
 }

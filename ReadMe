@@ -51,3 +51,36 @@ Contributions welcome. Open an issue or PR on the project repository and include
 License
 -------
 See the repository root for license info.
+
+Documentation
+-------------
+API documentation is generated with Doxygen via CMake.
+
+Generate the docs (from project root):
+
+```bash
+cmake -S . -B build
+cmake --build build --target doc_doxygen
+```
+
+After building the `doc_doxygen` target the HTML index is available at:
+
+`build/docs/html/index.html`
+
+Open it directly with your desktop browser:
+
+```bash
+xdg-open build/docs/html/index.html
+```
+
+Or serve the files locally and browse at http://localhost:8000:
+
+```bash
+cd build/docs/html
+python3 -m http.server 8000
+```
+
+Notes:
+- Doxygen must be installed on your system for the `doc_doxygen` target to be available.
+- Project Doxygen settings live in `Doxyfile.in` at the project root; edit that file to change inputs, output location, or extraction options.
+- The repository `.gitignore` has been updated to ignore generated Doxygen output (e.g. `build/docs/`).
