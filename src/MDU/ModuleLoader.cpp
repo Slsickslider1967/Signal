@@ -331,8 +331,30 @@ namespace MDU
 	{
 		std::ostringstream cmd;
 
-		// This uses the g++ compiler for loading and compiling the MDU files.#
-		// This builds a shared lib and sets the appropriate include paths for the MDU API and ImGui (for editor drawing).
+		// Platform-specific command construction
+#if defined(_WIN32)
+		// Windows: use g++ or MinGW-w64 for DLL
+		cmd << "g++"
+			<< " -shared -std=c++17 -x c++"
+			<< " -I" << EscapeForShell("include")
+			<< " -I" << EscapeForShell("include/MDU")
+			<< " -I" << EscapeForShell("../include")
+			<< " -I" << EscapeForShell("../include/MDU")
+			<< " -I" << EscapeForShell("external/imgui")
+			<< " -I" << EscapeForShell("../external/imgui")
+			<< " -I" << EscapeForShell("build/_deps/imgui-src")
+			<< " -I" << EscapeForShell("../build/_deps/imgui-src")
+			<< " -I" << EscapeForShell("_deps/imgui-src")
+			<< " -I" << EscapeForShell("external/imgui_knobs")
+			<< " -I" << EscapeForShell("../external/imgui_knobs")
+			<< " -I" << EscapeForShell("build/_deps/imgui_knobs-src")
+			<< " -I" << EscapeForShell("../build/_deps/imgui_knobs-src")
+			<< " -I" << EscapeForShell("_deps/imgui_knobs-src")
+			<< " " << EscapeForShell(mduPath)
+			<< " -o " << EscapeForShell(sharedObjectPath)
+			<< " -Wl,--out-implib," << EscapeForShell(sharedObjectPath + ".a");
+#else
+		// Linux/macOS: use g++ for .so
 		cmd << "g++"
 			<< " -shared -fPIC -std=c++17 -x c++"
 			<< " -I" << EscapeForShell("include")
@@ -351,6 +373,7 @@ namespace MDU
 			<< " -I" << EscapeForShell("_deps/imgui_knobs-src")
 			<< " " << EscapeForShell(mduPath)
 			<< " -o " << EscapeForShell(sharedObjectPath);
+#endif
 
 		const int rc = std::system(cmd.str().c_str());
 		if (rc != 0)
