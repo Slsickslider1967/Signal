@@ -1,3 +1,4 @@
+#include <algorithm>
 #include "MDU/ModuleLoader.h"
 
 #include <cstdlib>
@@ -13,16 +14,51 @@
 #include <dlfcn.h>
 #endif
 #include <filesystem>
+#include <fstream>
 #include <sstream>
+#include <cstdio> // for _popen
 #include <system_error>
+#include <iostream>
 
-namespace
-{
+
+#if defined(_WIN32)
+// Utility to convert all backslashes to forward slashes in a path
+inline std::string ToForwardSlashes(const std::string& path) {
+	std::string result = path;
+	std::replace(result.begin(), result.end(), '\\', '/');
+	return result;
+}
+
+// Check if a command exists in PATH
+inline bool CommandExists(const char* cmd) {
+	std::string checkCmd = std::string("where ") + cmd + " >nul 2>nul";
+	int ret = std::system(checkCmd.c_str());
+	return ret == 0;
+}
+#else
+inline std::string ToForwardSlashes(const std::string& path) { return path; }
+#endif
+
+namespace {
+#if defined(_WIN32)
+	// Use double quotes for Windows shell
+	std::string EscapeForShell(const std::string &Text)
+	{
+		std::string Escaped = Text;
+		// Escape embedded double quotes
+		size_t pos = 0;
+		while ((pos = Escaped.find('"', pos)) != std::string::npos) {
+			Escaped.insert(pos, "\\");
+			pos += 2;
+		}
+		return "\"" + Escaped + "\"";
+	}
+#else
+	// Use single quotes for Linux shell
 	std::string EscapeForShell(const std::string &Text)
 	{
 		std::string Escaped;
 		Escaped.reserve(Text.size() + 8);
-
 		for (char Character : Text)
 		{
 			if (Character == '\'')
@@ -34,9 +70,9 @@ namespace
 				Escaped.push_back(Character);
 			}
 		}
-
 		return "'" + Escaped + "'";
 	}
+#endif
 
 	std::string MakeAbsolutePath(const std::string &maybeRelative)
 	{
@@ -319,7 +355,11 @@ namespace MDU
 	{
 		std::filesystem::path sourcePath(mduPath);
 		std::filesystem::path fileName = sourcePath.filename();
+	#if defined(_WIN32)
+		fileName += ".dll";
+	#else
 		fileName += ".so";
+	#endif
 
 		std::filesystem::path outPath(CacheDirectory);
 		outPath /= fileName;
@@ -331,61 +371,122 @@ namespace MDU
 	{
 		std::ostringstream cmd;
 
-		// Platform-specific command construction
-#if defined(_WIN32)
-		// Windows: use g++ or MinGW-w64 for DLL
-		cmd << "g++"
-			<< " -shared -std=c++17 -x c++"
-			<< " -I" << EscapeForShell("include")
-			<< " -I" << EscapeForShell("include/MDU")
-			<< " -I" << EscapeForShell("../include")
-			<< " -I" << EscapeForShell("../include/MDU")
-			<< " -I" << EscapeForShell("external/imgui")
-			<< " -I" << EscapeForShell("../external/imgui")
-			<< " -I" << EscapeForShell("build/_deps/imgui-src")
-			<< " -I" << EscapeForShell("../build/_deps/imgui-src")
-			<< " -I" << EscapeForShell("_deps/imgui-src")
-			<< " -I" << EscapeForShell("external/imgui_knobs")
-			<< " -I" << EscapeForShell("../external/imgui_knobs")
-			<< " -I" << EscapeForShell("build/_deps/imgui_knobs-src")
-			<< " -I" << EscapeForShell("../build/_deps/imgui_knobs-src")
-			<< " -I" << EscapeForShell("_deps/imgui_knobs-src")
-			<< " " << EscapeForShell(mduPath)
-			<< " -o " << EscapeForShell(sharedObjectPath)
-			<< " -Wl,--out-implib," << EscapeForShell(sharedObjectPath + ".a");
-#else
-		// Linux/macOS: use g++ for .so
-		cmd << "g++"
-			<< " -shared -fPIC -std=c++17 -x c++"
-			<< " -I" << EscapeForShell("include")
-			<< " -I" << EscapeForShell("include/MDU")
-			<< " -I" << EscapeForShell("../include")
-			<< " -I" << EscapeForShell("../include/MDU")
-			<< " -I" << EscapeForShell("external/imgui")
-			<< " -I" << EscapeForShell("../external/imgui")
-			<< " -I" << EscapeForShell("build/_deps/imgui-src")
-			<< " -I" << EscapeForShell("../build/_deps/imgui-src")
-			<< " -I" << EscapeForShell("_deps/imgui-src")
-			<< " -I" << EscapeForShell("external/imgui_knobs")
-			<< " -I" << EscapeForShell("../external/imgui_knobs")
-			<< " -I" << EscapeForShell("build/_deps/imgui_knobs-src")
-			<< " -I" << EscapeForShell("../build/_deps/imgui_knobs-src")
-			<< " -I" << EscapeForShell("_deps/imgui_knobs-src")
-			<< " " << EscapeForShell(mduPath)
-			<< " -o " << EscapeForShell(sharedObjectPath);
-#endif
-
-		const int rc = std::system(cmd.str().c_str());
-		if (rc != 0)
-		{
-			if (errorOut)
-			{
-				*errorOut = "[MLD002] Failed compiling module: " + mduPath + " (exit code " + std::to_string(rc) + ")";
-			}
+	#ifdef _WIN32
+		// Always preprocess .mdu to strip metadata block on Windows (MSVC or MinGW)
+		std::ifstream inFile(mduPath);
+		if (!inFile.is_open()) {
+			if (errorOut) *errorOut = std::string("[MLD002] Failed to open ") + mduPath;
 			return false;
 		}
+		std::string line;
+		bool inHeader = false;
+		std::ostringstream cppContent;
+		while (std::getline(inFile, line)) {
+			if (!inHeader && line.find("/*! Module") != std::string::npos) {
+				inHeader = true;
+				continue;
+			}
+			if (inHeader && line.find("*/") != std::string::npos) {
+				inHeader = false;
+				continue;
+			}
+			if (!inHeader) {
+				cppContent << line << "\n";
+			}
+		}
+		inFile.close();
+		// Write to temp .cpp file
+		std::string tempCpp = sharedObjectPath + ".cpp";
+		std::ofstream outFile(tempCpp);
+		if (!outFile.is_open()) {
+			if (errorOut) *errorOut = std::string("[MLD002] Failed to write temp cpp: ") + tempCpp;
+			return false;
+		}
+		outFile << cppContent.str();
+		outFile.close();
 
-		return true;
+		// At runtime, check if cl.exe is available in PATH. If not, use g++.
+		bool useCl = CommandExists("cl.exe");
+		if (useCl) {
+			cmd << "cl.exe"
+				<< " /LD /std:c++17"
+				<< " /I" << "include"
+				<< " /I" << "include/MDU"
+				<< " /I" << "../include"
+				<< " /I" << "../include/MDU"
+				<< " /I" << "external/imgui"
+				<< " /I" << "../external/imgui"
+				<< " /I" << "build/_deps/imgui-src"
+				<< " /I" << "../build/_deps/imgui-src"
+				<< " /I" << "_deps/imgui-src"
+				<< " /I" << "external/imgui_knobs"
+				<< " /I" << "../external/imgui_knobs"
+				<< " /I" << "build/_deps/imgui_knobs-src"
+				<< " /I" << "../build/_deps/imgui_knobs-src"
+				<< " /I" << "_deps/imgui_knobs-src"
+				<< " " << tempCpp
+				<< " /Fe:" << sharedObjectPath
+				<< " /link /DLL /OUT:" << sharedObjectPath;
+		} else {
+			cmd << "g++"
+				<< " -shared -std=c++17"
+				<< " -Iinclude -Iinclude/MDU -I../include -I../include/MDU"
+				<< " -Iexternal/imgui -I../external/imgui -Ibuild/_deps/imgui-src -I../build/_deps/imgui-src -I_deps/imgui-src"
+				<< " -Iexternal/imgui_knobs -I../external/imgui_knobs -Ibuild/_deps/imgui_knobs-src -I../build/_deps/imgui_knobs-src -I_deps/imgui_knobs-src"
+				<< " " << tempCpp
+				<< " -o " << sharedObjectPath;
+		}
+	#else
+		// Linux/macOS: use g++ for .so
+		cmd << "g++"
+			<< " -shared -fPIC -std=c++17"
+			<< " -I" << EscapeForShell("include")
+			<< " -I" << EscapeForShell("include/MDU")
+			<< " -I" << EscapeForShell("../include")
+			<< " -I" << EscapeForShell("../include/MDU")
+			<< " -I" << EscapeForShell("external/imgui")
+			<< " -I" << EscapeForShell("../external/imgui")
+			<< " -I" << EscapeForShell("build/_deps/imgui-src")
+			<< " -I" << EscapeForShell("../build/_deps/imgui-src")
+			<< " -I" << EscapeForShell("_deps/imgui-src")
+			<< " -I" << EscapeForShell("external/imgui_knobs")
+			<< " -I" << EscapeForShell("../external/imgui_knobs")
+			<< " -I" << EscapeForShell("build/_deps/imgui_knobs-src")
+			<< " -I" << EscapeForShell("../build/_deps/imgui_knobs-src")
+			<< " -I" << EscapeForShell("_deps/imgui_knobs-src")
+			<< " -x c++ " << EscapeForShell(mduPath)
+			<< " -o " << EscapeForShell(sharedObjectPath);
+	#endif
+		std::string command = cmd.str();
+		std::string output;
+		int ReturnCode = 0;
+	#if defined(_WIN32)
+			// Use _popen to capture output
+			std::cerr << "[MDU DEBUG] Compiling module with command: " << command << std::endl;
+			FILE* pipe = _popen(command.c_str(), "r");
+			if (!pipe) ReturnCode = -1;
+			else {
+				char buffer[256];
+				while (fgets(buffer, sizeof(buffer), pipe)) {
+					output += buffer;
+					std::cerr << "[MDU DEBUG] " << buffer;
+				}
+				ReturnCode = _pclose(pipe);
+			}
+	#else
+			std::cerr << "[MDU DEBUG] Compiling module with command: " << command << std::endl;
+			output = "";
+			ReturnCode = std::system(command.c_str());
+	#endif
+			if (ReturnCode != 0) {
+				if (errorOut) {
+					*errorOut = "[MLD002] Failed compiling module: " + mduPath + " (exit code " + std::to_string(ReturnCode) + ")\nCommand: " + command + "\nOutput:\n" + output;
+				}
+				std::cerr << "[MDU DEBUG] Module compile failed!" << std::endl;
+				return false;
+			}
+			std::cerr << "[MDU DEBUG] Module compile succeeded." << std::endl;
+			return true;
 	}
 
 	void ModuleLoader::SetTemplatePath(const std::string &path)

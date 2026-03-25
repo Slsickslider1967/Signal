@@ -106,7 +106,20 @@ add_library(imgui_knobs_lib STATIC
 target_include_directories(imgui_knobs_lib PUBLIC ${imgui_knobs_SOURCE_DIR})
 target_link_libraries(imgui_knobs_lib PUBLIC imgui)
 
+
 # ---------- Application target ----------
+#
+# NOTE: .mdu files are NOT compiled by CMake. They are loaded and compiled at runtime by the ModuleLoader.
+#       Do NOT add .mdu files to add_executable or add_library. This keeps the build cross-platform.
+#
+# To build with MSVC on Windows, use:
+#   cmake -S . -B build -G "Visual Studio 17 2022"
+#   cmake --build build --config Release
+# To build with MinGW on Windows, use:
+#   cmake -S . -B build -G "MinGW Makefiles"
+#   cmake --build build
+# On Linux/macOS, use the default generator and g++.
+
 
 add_executable(Signals
 	src/Handler.cpp

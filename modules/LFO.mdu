@@ -106,7 +106,7 @@ public:
         
     }
 
-    bool SetParameter(const string &parameterID, float outValue) override
+    bool SetParameter(const std::string &parameterID, float outValue) override
     {
         if (parameterID == "rate_hz")
         {
@@ -139,7 +139,7 @@ public:
         return false;
     }
 
-    bool GetParameter(const string &parameterID, float &outValue) override
+    bool GetParameter(const std::string &parameterID, float &outValue) override
     {
         if (parameterID == "rate_hz")
         {
