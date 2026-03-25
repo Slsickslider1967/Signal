@@ -28,13 +28,6 @@ inline std::string ToForwardSlashes(const std::string& path) {
 	std::replace(result.begin(), result.end(), '\\', '/');
 	return result;
 }
-
-// Check if a command exists in PATH
-inline bool CommandExists(const char* cmd) {
-	std::string checkCmd = std::string("where ") + cmd + " >nul 2>nul";
-	int ret = std::system(checkCmd.c_str());
-	return ret == 0;
-}
 #else
 inline std::string ToForwardSlashes(const std::string& path) { return path; }
 #endif
@@ -405,37 +398,14 @@ namespace MDU
 		outFile << cppContent.str();
 		outFile.close();
 
-		// At runtime, check if cl.exe is available in PATH. If not, use g++.
-		bool useCl = CommandExists("cl.exe");
-		if (useCl) {
-			cmd << "cl.exe"
-				<< " /LD /std:c++17"
-				<< " /I" << "include"
-				<< " /I" << "include/MDU"
-				<< " /I" << "../include"
-				<< " /I" << "../include/MDU"
-				<< " /I" << "external/imgui"
-				<< " /I" << "../external/imgui"
-				<< " /I" << "build/_deps/imgui-src"
-				<< " /I" << "../build/_deps/imgui-src"
-				<< " /I" << "_deps/imgui-src"
-				<< " /I" << "external/imgui_knobs"
-				<< " /I" << "../external/imgui_knobs"
-				<< " /I" << "build/_deps/imgui_knobs-src"
-				<< " /I" << "../build/_deps/imgui_knobs-src"
-				<< " /I" << "_deps/imgui_knobs-src"
-				<< " " << tempCpp
-				<< " /Fe:" << sharedObjectPath
-				<< " /link /DLL /OUT:" << sharedObjectPath;
-		} else {
-			cmd << "g++"
-				<< " -shared -std=c++17"
-				<< " -Iinclude -Iinclude/MDU -I../include -I../include/MDU"
-				<< " -Iexternal/imgui -I../external/imgui -Ibuild/_deps/imgui-src -I../build/_deps/imgui-src -I_deps/imgui-src"
-				<< " -Iexternal/imgui_knobs -I../external/imgui_knobs -Ibuild/_deps/imgui_knobs-src -I../build/_deps/imgui_knobs-src -I_deps/imgui_knobs-src"
-				<< " " << tempCpp
-				<< " -o " << sharedObjectPath;
-		}
+		// Always use g++ on Windows
+		cmd << "g++"
+			<< " -shared -std=c++17"
+			<< " -Iinclude -Iinclude/MDU -I../include -I../include/MDU"
+			<< " -Iexternal/imgui -I../external/imgui -Ibuild/_deps/imgui-src -I../build/_deps/imgui-src -I_deps/imgui-src"
+			<< " -Iexternal/imgui_knobs -I../external/imgui_knobs -Ibuild/_deps/imgui_knobs-src -I../build/_deps/imgui_knobs-src -I_deps/imgui_knobs-src"
+			<< " " << tempCpp
+			<< " -o " << sharedObjectPath;
 	#else
 		// Linux/macOS: use g++ for .so
 		cmd << "g++"

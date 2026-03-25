@@ -760,7 +760,10 @@ void DrawModuleDetails()
             if (value > parameter->maxValue)
                 value = parameter->maxValue;
         }
-        selectedModule->Instance->SetParameter(parameterID, value);
+        if (selectedModule->Instance != nullptr)
+        {
+            selectedModule->Instance->SetParameter(parameterID, value);
+        }
     };
 
     auto drawKnobByID = [&](const std::string &parameterID,
@@ -847,7 +850,10 @@ void DrawModuleDetails()
         const std::string moduleTypeLower = toLowerCopy(selectedModule->Metadata.ModuleType);
         const std::string moduleNameLower = toLowerCopy(selectedModule->Metadata.ModuleName);
 
-        selectedModule->Instance->DrawEditor();
+        if (selectedModule->Instance != nullptr)
+        {
+            selectedModule->Instance->DrawEditor();
+        }
 
         ImGui::Spacing();
         ImGui::Separator();
@@ -974,7 +980,10 @@ void AudioFilterCallback(float *buffer, int numSamples, void *userData)
             bufferView.NumberOfSamples = static_cast<size_t>(numSamples);
             bufferView.SampleRate = 44100;
 
-            module->Instance->Process(bufferView, 0.0f);
+            if (module->Instance != nullptr)
+            {
+                module->Instance->Process(bufferView, 0.0f);
+            }
 
             const float *firstOutput = outputPins.empty() ? nullptr : outputPins[0];
             CaptureScopeSamples(GModuleScopeOutputs, module->ID, firstOutput, numSamples);
