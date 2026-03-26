@@ -100,9 +100,13 @@ namespace MDU
         MDU_REGISTER(TemplateModule)
         )MDU";
 
-        std::filesystem::path outputPath = targetPath.empty()
-            ? std::filesystem::current_path() / "TemplateModule.mdu"
-            : targetPath;
+        std::filesystem::path outputPath;
+        
+        if (targetPath.empty()) {
+            outputPath = std::filesystem::current_path() / "TemplateModule.mdu";
+        } else {
+            outputPath = targetPath;
+        }
         std::ofstream outFile(outputPath);
         if (outFile)      
         {

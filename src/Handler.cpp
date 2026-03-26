@@ -1274,7 +1274,7 @@ std::filesystem::path GetDefaultTemplatePath()
     const char *home = std::getenv("HOME");
     if (home != nullptr && *home != '\0')
     {
-        std::filesystem::path documents = std::filesystem::path(home) / "Documents" / "Signal";
+        std::filesystem::path documents = std::filesystem::path(home) / "Documents" / "Signal" / "Modules";
         std::error_code mkdirError;
         std::filesystem::create_directories(documents, mkdirError);
 
