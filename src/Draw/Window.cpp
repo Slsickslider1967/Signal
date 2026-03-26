@@ -1,18 +1,18 @@
 #include <iostream>
-#include "../../include/Functions/Window.h"
+#include "Draw/Window.h"
 #include <glad/gl.h>
 #include <GLFW/glfw3.h>
 #include <string>
-#include "imgui.h"
+#include "Draw/Window.h"
 #include "implot.h"
 #include "imnodes.h"
 #include "backends/imgui_impl_glfw.h"
 #include "backends/imgui_impl_opengl3.h"
-#include "../../include/Functions/ConsoleHandling.h"
+#include "Functions/ConsoleHandling.h"
 
 #include <thread>
 #include <chrono>
-#include <cstdlib>
+#include "Functions/ConsoleHandling.h"
 
 namespace Window 
 {

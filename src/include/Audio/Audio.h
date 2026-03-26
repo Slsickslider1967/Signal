@@ -1,7 +1,7 @@
 #pragma once
 
 #include <vector>
-#include "../WaveForm.h"
+#include "WaveForm.h"
 
 namespace Audio
 {

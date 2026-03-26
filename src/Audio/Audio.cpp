@@ -8,8 +8,8 @@
 #include <chrono>
 #include <algorithm>
 
-#include "../../include/Functions/Audio.h"
-#include "../../include/WaveForm.h"
+#include "Audio/Audio.h"
+#include "WaveForm.h"
 
 namespace Audio
 {

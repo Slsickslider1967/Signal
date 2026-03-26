@@ -1,8 +1,8 @@
 #pragma once 
 
 #include "WaveForm.h"
-#include "Functions/Window.h"
-#include "Functions/Audio.h"
+#include "Draw/Window.h"
+#include "Audio/Audio.h"
 
 namespace WaveFormGenerator
 {

@@ -1,7 +1,7 @@
 #include <cmath>
 #include <random>
-#include "../../include/WaveForm.h"
-#include "../../include/Functions/CV.h"
+#include "WaveForm.h"
+#include "Audio/CV.h"
 
 
 float NormalizedToVoltage(float normalized, WaveForm::VoltageRange range)

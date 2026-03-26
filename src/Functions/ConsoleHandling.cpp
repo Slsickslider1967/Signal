@@ -8,7 +8,7 @@
 #include <vector>
 #include <list>
 
-#include "../../include/Functions/ConsoleHandling.h"
+#include "Functions/ConsoleHandling.h"
 
 static std::mutex GConsoleMutex;
 static std::vector<std::string> GConsoleLines;

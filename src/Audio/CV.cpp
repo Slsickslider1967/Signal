@@ -3,9 +3,9 @@
 #include <list>
 #include <cmath>
 
-#include "../../include/Functions/CV.h"
-#include "../../include/WaveForm.h"
-#include "../../include/Functions/Audio.h"
+#include "Audio/CV.h"
+#include "WaveForm.h"
+#include "Audio/Audio.h"
 
 namespace CV
 {

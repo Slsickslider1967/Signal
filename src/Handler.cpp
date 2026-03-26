@@ -19,14 +19,14 @@
 #include "implot.h"
 #include "imnodes.h"
 
-#include "../include/Functions/Audio.h"
-#include "../include/Functions/ImGuiUtil.h"
-#include "../include/Functions/Module.h"
-#include "../include/Functions/Window.h"
-#include "../include/MDU/FileWatcher.h"
-#include "../include/MDU/ModuleLoader.h"
-#include "../include/Functions/ConsoleHandling.h"
-#include "../include/MDU/CreateMDU.h"
+#include "Audio/Audio.h"
+#include "Draw/ImGuiUtil.h"
+#include "Functions/Module.h"
+#include "Draw/Window.h"
+#include "MDU/FileWatcher.h"
+#include "MDU/ModuleLoader.h"
+#include "Functions/ConsoleHandling.h"
+#include "MDU/CreateMDU.h"
 
 struct Rack
 {
@@ -401,13 +401,34 @@ void DrawTopBar()
             }
             ImGui::EndMenu();
         }
+        if (ImGui::BeginMenu("Record"))
+        {
+            if (ImGui::MenuItem("Start Recording"))
+            {
+                Console::AppendConsoleLine("[info] Recording started (not implemented)");
+            }
+            if (ImGui::MenuItem("Stop Recording"))
+            {
+                Console::AppendConsoleLine("[info] Recording stopped (not implemented)");
+            }
+            if (ImGui::MenuItem("Save Last Recording"))
+            {
+                Console::AppendConsoleLine("[info] Recording saved (not implemented)");
+            }
+            ImGui::EndMenu();
+        }
         if (ImGui::BeginMenu("File"))
         {
-            if (ImGui::MenuItem("Open template folder"))
+            if (ImGui::MenuItem("Open Template Folder"))
             {
                 LaunchDefaultFileManager(GModuleLoader.GetTemplatePath());
             }
-            if (ImGui::MenuItem("Create template MDU"))
+            if (ImGui::MenuItem("Open Recordings Folder"))
+            {
+                std::filesystem::path recordingsPath = std::filesystem::current_path() / "recordings";
+                LaunchDefaultFileManager(recordingsPath);
+            }
+            if (ImGui::MenuItem("Create Template MDU"))
             {
                 MDU::CreateTemplateMDU(GModuleLoader.GetTemplatePath());
             }
@@ -512,7 +533,7 @@ void Debug()
 void MainWindow()
 {
     setenv("PREFER_X11", "1", 1);
-    Window::CreateWindow(12850, 720, "Signal Handler");
+    Window::CreateWindow(1020, 720, "Signal Handler");
     Console::AppendConsoleLine("Window initialized: Signal Handler (12850x720)");
     SetupAudioHandling();
     Window::PollEvents();

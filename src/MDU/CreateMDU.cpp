@@ -3,8 +3,8 @@
 #include <string>
 #include <filesystem>
 
-#include "../../include/MDU/CreateMDU.h"
-#include "../../include/Functions/ConsoleHandling.h"
+#include "MDU/CreateMDU.h"
+#include "Functions/ConsoleHandling.h"
 
 namespace MDU
 {

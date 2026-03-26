@@ -103,28 +103,31 @@ target_link_libraries(imgui_knobs_lib PUBLIC imgui)
 
 # ---------- Application target ----------
 
+
 add_executable(Signals
 	src/Handler.cpp
 	src/MDU/ModuleLoader.cpp
 	src/MDU/FileWatcher.cpp
 	src/MDU/mduParser.cpp
-	src/Functions/Window.cpp
-	src/Functions/ImGuiUtil.cpp
-	src/Functions/Audio.cpp
-	src/Functions/CV.cpp
-	src/Functions/WaveForm.cpp
-	src/Functions/ConsoleHandling.cpp
 	src/MDU/CreateMDU.cpp
-	src/Functions/Draw.cpp
-	)
+	src/Draw/Draw.cpp
+	src/Draw/ImGuiUtil.cpp
+	src/Draw/Window.cpp
+	src/Audio/Audio.cpp
+	src/Audio/CV.cpp
+	src/Audio/WaveForm.cpp
+	src/Functions/ConsoleHandling.cpp
+)
 
 	# Export executable symbols for dlopen modules
 	set_target_properties(Signals PROPERTIES LINK_FLAGS "-Wl,--export-dynamic")
 
 target_include_directories(Signals PRIVATE
-	${CMAKE_SOURCE_DIR}/include
-	${CMAKE_SOURCE_DIR}/include/Functions
-	${CMAKE_SOURCE_DIR}/include/Modules
+	${CMAKE_SOURCE_DIR}/src/include
+	${CMAKE_SOURCE_DIR}/src/include/Draw
+	${CMAKE_SOURCE_DIR}/src/include/Audio
+	${CMAKE_SOURCE_DIR}/src/include/Functions
+	${CMAKE_SOURCE_DIR}/src/include/MDU
 	${CMAKE_BINARY_DIR}/gladsources/glad_gl_core_33/include
 )
 

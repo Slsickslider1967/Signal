@@ -2,10 +2,8 @@
 
 // #include "imgui.h"
 
-// #include "../../include/Functions/Draw.h"
-// #include "../../include/Functions/Module.h"
-// #include "../../include/Functions/ConsoleHandling.h"
-// #include "../../include/MDU/ModuleLoader.h"
+// #include "Draw/Draw.h"
+// #include "WaveForm.h"
 
 // namespace Draw
 // {
