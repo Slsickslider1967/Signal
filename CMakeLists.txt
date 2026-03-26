@@ -143,3 +143,20 @@ target_link_libraries(Signals PRIVATE
 )
 
 add_dependencies(Signals glad_gl_core_33)
+ 
+# ------------------ Doxygen documentation ------------------
+find_package(Doxygen QUIET)
+if(DOXYGEN_FOUND)
+	set(DOXYFILE_IN ${CMAKE_SOURCE_DIR}/Doxyfile.in)
+	set(DOXYFILE_OUT ${CMAKE_BINARY_DIR}/Doxyfile)
+	configure_file(${DOXYFILE_IN} ${DOXYFILE_OUT} @ONLY)
+
+	add_custom_target(doc_doxygen ALL
+		COMMAND ${DOXYGEN_EXECUTABLE} ${DOXYFILE_OUT}
+		WORKING_DIRECTORY ${CMAKE_BINARY_DIR}
+		COMMENT "Generating API documentation with Doxygen"
+		VERBATIM
+	)
+else()
+	message(STATUS "Doxygen not found - 'doc_doxygen' target will not be available.")
+endif()
