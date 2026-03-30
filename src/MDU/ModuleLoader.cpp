@@ -410,10 +410,9 @@ namespace MDU
 		// Linux/macOS: use g++ for .so
 		cmd << "g++"
 			<< " -shared -fPIC -std=c++17"
-			<< " -I" << EscapeForShell("include")
-			<< " -I" << EscapeForShell("include/MDU")
-			<< " -I" << EscapeForShell("../include")
-			<< " -I" << EscapeForShell("../include/MDU")
+			<< " -I" << EscapeForShell("src/include/MDU")
+			<< " -I" << EscapeForShell("src/include")
+			<< " -I" << EscapeForShell("src/include/MDU")
 			<< " -I" << EscapeForShell("external/imgui")
 			<< " -I" << EscapeForShell("../external/imgui")
 			<< " -I" << EscapeForShell("build/_deps/imgui-src")
