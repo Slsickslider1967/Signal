@@ -1,6 +1,10 @@
-cmake_minimum_required(VERSION 3.16)
+cmake_minimum_required(VERSION 3.31)
 
 project(Signals LANGUAGES C CXX)
+
+find_package(Python3 COMPONENTS Interpreter REQUIRED)
+message(STATUS "CMake is using Python interpreter: ${Python3_EXECUTABLE}")
+set(PYTHON_EXECUTABLE ${Python3_EXECUTABLE})
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -77,6 +81,7 @@ add_library(imgui STATIC
 	${imgui_SOURCE_DIR}/backends/imgui_impl_opengl3.cpp
 	${imgui_SOURCE_DIR}/misc/cpp/imgui_stdlib.cpp
 )
+target_include_directories(imgui PRIVATE ${CMAKE_BINARY_DIR}/_deps/glfw-src/include)
 target_include_directories(imgui PUBLIC
 	${imgui_SOURCE_DIR}
 	${imgui_SOURCE_DIR}/backends
@@ -101,6 +106,7 @@ add_library(imgui_knobs_lib STATIC
 target_include_directories(imgui_knobs_lib PUBLIC ${imgui_knobs_SOURCE_DIR})
 target_link_libraries(imgui_knobs_lib PUBLIC imgui)
 
+
 # ---------- Application target ----------
 
 
@@ -119,8 +125,10 @@ add_executable(Signals
 	src/Functions/ConsoleHandling.cpp
 )
 
-	# Export executable symbols for dlopen modules
-	set_target_properties(Signals PROPERTIES LINK_FLAGS "-Wl,--export-dynamic")
+	# Export executable symbols for dlopen modules (Linux/Unix only)
+	if(NOT WIN32)
+		set_target_properties(Signals PROPERTIES LINK_FLAGS "-Wl,--export-dynamic")
+	endif()
 
 target_include_directories(Signals PRIVATE
 	${CMAKE_SOURCE_DIR}/src/include
@@ -142,8 +150,11 @@ target_link_libraries(Signals PRIVATE
 	OpenGL::GL
 	SDL2::SDL2
 	glad_gl_core_33
-	dl
 )
+if(NOT WIN32)
+	target_link_libraries(Signals PRIVATE dl)
+endif()
+
 
 add_dependencies(Signals glad_gl_core_33)
  

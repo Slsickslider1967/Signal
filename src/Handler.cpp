@@ -276,10 +276,12 @@ int main()
         ImGuiViewport *mainViewport = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(mainViewport->WorkPos);
         ImGui::SetNextWindowSize(mainViewport->WorkSize);
-        ImGui::SetNextWindowViewport(mainViewport->ID);
+        #if defined(__linux__) || defined(__unix__) || defined(__APPLE__)
+            ImGui::SetNextWindowViewport(mainViewport->ID);
+        #endif
 
         ImGuiWindowFlags rackManagerFlags =
-            ImGuiWindowFlags_NoDocking |
+            // ImGuiWindowFlags_NoDocking |
             ImGuiWindowFlags_NoMove |
             ImGuiWindowFlags_NoResize |
             ImGuiWindowFlags_NoCollapse |
@@ -532,9 +534,13 @@ void Debug()
 
 void MainWindow()
 {
-    setenv("PREFER_X11", "1", 1);
-    Window::CreateWindow(1020, 720, "Signal Handler");
-    Console::AppendConsoleLine("Window initialized: Signal Handler (12850x720)");
+    #if (defined(__linux__) || defined(__unix__) || defined(__APPLE__))
+        setenv("PREFER_X11", "1", 1);
+    #endif
+    int Width = 1020;
+    int Height = 720;
+    Window::CreateWindow(Width, Height, "Signal Handler");
+    Console::AppendConsoleLine("Window initialized: Signal Handler (" + std::to_string(Width) + "x" + std::to_string(Height) + ")");
     SetupAudioHandling();
     Window::PollEvents();
 }
@@ -775,7 +781,10 @@ void DrawModuleDetails()
             if (value > parameter->maxValue)
                 value = parameter->maxValue;
         }
-        selectedModule->Instance->SetParameter(parameterID, value);
+        if (selectedModule->Instance != nullptr)
+        {
+            selectedModule->Instance->SetParameter(parameterID, value);
+        }
     };
 
     auto drawKnobByID = [&](const std::string &parameterID,
@@ -862,7 +871,10 @@ void DrawModuleDetails()
         const std::string moduleTypeLower = toLowerCopy(selectedModule->Metadata.ModuleType);
         const std::string moduleNameLower = toLowerCopy(selectedModule->Metadata.ModuleName);
 
-        selectedModule->Instance->DrawEditor();
+        if (selectedModule->Instance != nullptr)
+        {
+            selectedModule->Instance->DrawEditor();
+        }
 
         ImGui::Spacing();
         ImGui::Separator();
@@ -989,7 +1001,10 @@ void AudioFilterCallback(float *buffer, int numSamples, void *userData)
             bufferView.NumberOfSamples = static_cast<size_t>(numSamples);
             bufferView.SampleRate = 44100;
 
-            module->Instance->Process(bufferView, 0.0f);
+            if (module->Instance != nullptr)
+            {
+                module->Instance->Process(bufferView, 0.0f);
+            }
 
             const float *firstOutput = outputPins.empty() ? nullptr : outputPins[0];
             CaptureScopeSamples(GModuleScopeOutputs, module->ID, firstOutput, numSamples);

@@ -13,6 +13,9 @@
 #include <thread>
 #include <chrono>
 #include "Functions/ConsoleHandling.h"
+#if defined(_WIN32)
+#include <cstring>
+#endif
 
 namespace Window 
 {
@@ -31,9 +34,14 @@ namespace Window
             std::string Message = "PREFER_X11 detected — preferring X11 (XWayland) backend";
             std::cout << Message << std::endl;
             Console::AppendConsoleLine(Message);
-
+#if defined(_WIN32)
+            // Windows: use _putenv_s to set/unset environment variables
+            _putenv_s("XDG_SESSION_TYPE", "x11");
+            _putenv_s("WAYLAND_DISPLAY", ""); // Unset by setting to empty
+#else
             setenv("XDG_SESSION_TYPE", "x11", 1);
             unsetenv("WAYLAND_DISPLAY");
+#endif
         }
         std::cout << "Creating window: " << Title << " (" << Width << "x" << Height << ")" << std::endl;
         Console::AppendConsoleLine("Creating window: " + std::string(Title) + " (" + std::to_string(Width) + "x" + std::to_string(Height) + ")");
