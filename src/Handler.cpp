@@ -18,7 +18,6 @@
 #include "imgui_stdlib.h"
 #include "implot.h"
 #include "imnodes.h"
-
 #include "Audio/Audio.h"
 #include "Draw/ImGuiUtil.h"
 #include "Functions/Module.h"
@@ -27,6 +26,7 @@
 #include "MDU/ModuleLoader.h"
 #include "Functions/ConsoleHandling.h"
 #include "MDU/CreateMDU.h"
+#include "Audio/Record.h"
 
 struct Rack
 {
@@ -40,18 +40,25 @@ struct Rack
 static int NextRackID = 1;
 static int NextModuleID = 1;
 static int NextLinkID = 1;
-static std::list<Rack> Racks;
 static int SelectedModuleID = -1;
 static int SelectedRackID = -1;
 
+static std::list<Rack> Racks;
+
 static MDU::ModuleLoader GModuleLoader;
 static MDU::FileWatcher GFileWatcher;
-static bool GFileWatcherInitialized = false;
+
 static std::mutex GRackMutex;
+
 static std::string GLastMduError;
+
 static std::map<int, std::vector<float>> GModuleScopeInputs;
 static std::map<int, std::vector<float>> GModuleScopeOutputs;
+
+static bool GFileWatcherInitialized = false;
 static bool GShowDebugConsole = false;
+static bool IsRecording = false;
+// boolording = false;
 
 void MainWindow();
 void CleanUp();
@@ -349,6 +356,8 @@ int main()
 
 // --Draw--
 
+
+
 void DrawTopBar()
 {
 
@@ -403,21 +412,60 @@ void DrawTopBar()
             }
             ImGui::EndMenu();
         }
+        static bool showSaveDialog = false;
+        static bool popupJustOpened = false;
+        static char saveFileName[256] = "";
         if (ImGui::BeginMenu("Record"))
         {
             if (ImGui::MenuItem("Start Recording"))
             {
-                Console::AppendConsoleLine("[info] Recording started (not implemented)");
+                Record::OpenWavForRecording("");
+                Record::StartRecording();
+                IsRecording = true;
             }
             if (ImGui::MenuItem("Stop Recording"))
             {
-                Console::AppendConsoleLine("[info] Recording stopped (not implemented)");
+                Record::StopRecording();
+                IsRecording = false;
             }
+            ImGui::Separator();
             if (ImGui::MenuItem("Save Last Recording"))
             {
-                Console::AppendConsoleLine("[info] Recording saved (not implemented)");
+                showSaveDialog = true;
+                popupJustOpened = true;
+                strcpy(saveFileName, "recording.wav");
+            }
+            if (ImGui::MenuItem("Recording Settings"))
+            {
+                Console::AppendConsoleLine("[info] Recording settings opened (not implemented)");
             }
             ImGui::EndMenu();
+        }
+
+        // Popup logic must be outside the menu block
+        if (showSaveDialog && popupJustOpened)
+        {
+            ImGui::OpenPopup("Save Recording As");
+            popupJustOpened = false;
+        }
+        if (ImGui::BeginPopupModal("Save Recording As", NULL, ImGuiWindowFlags_AlwaysAutoResize))
+        {
+            ImGui::InputText("File Name", saveFileName, IM_ARRAYSIZE(saveFileName));
+            if (ImGui::Button("Save"))
+            {
+                std::string fullPath = std::string(getenv("HOME") ? getenv("HOME") : "") + "/Documents/Signal/Recordings/" + saveFileName;
+                Record::SetWavPath(fullPath);
+                Record::SaveLastRecording();
+                showSaveDialog = false;
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Cancel"))
+            {
+                showSaveDialog = false;
+                ImGui::CloseCurrentPopup();
+            }
+            ImGui::EndPopup();
         }
         if (ImGui::BeginMenu("File"))
         {
@@ -427,9 +475,20 @@ void DrawTopBar()
             }
             if (ImGui::MenuItem("Open Recordings Folder"))
             {
-                std::filesystem::path recordingsPath = std::filesystem::current_path() / "recordings";
+                const char* home = std::getenv("HOME");
+                std::filesystem::path recordingsPath;
+                if (home && *home) 
+                {
+                    recordingsPath = std::filesystem::path(home) / "Documents" / "Signal";
+                } 
+                else 
+                {
+                    recordingsPath = std::filesystem::current_path() / "documents" / "signal";
+                }
+
                 LaunchDefaultFileManager(recordingsPath);
             }
+            ImGui::Separator();
             if (ImGui::MenuItem("Create Template MDU"))
             {
                 MDU::CreateTemplateMDU(GModuleLoader.GetTemplatePath());
@@ -485,11 +544,22 @@ void DrawTopBar()
             }
             ImGui::EndMenu();
         }
+        if (IsRecording)
+        {
+            ImDrawList* draw_list = ImGui::GetWindowDrawList();
+            ImVec2 bar_pos = ImGui::GetWindowPos();
+            ImVec2 bar_size = ImGui::GetWindowSize();
+            ImVec2 circle_center = ImVec2(bar_pos.x + bar_size.x - 20.0f, bar_pos.y + bar_size.y / 2.0f);
+            float radius = 7.0f;
+            draw_list->AddCircleFilled(circle_center, radius, IM_COL32(255, 0, 0, 255));
+        }
         ImGui::EndMainMenuBar();
     }
 
     Debug();
 }
+
+
 
 void Debug()
 {
@@ -1030,14 +1100,22 @@ void AudioFilterCallback(float *buffer, int numSamples, void *userData)
             }
 
             const auto &outBuffer = outIt->second;
+            // Debug: print sum of output buffer
+            float sum = 0.0f;
             for (int i = 0; i < numSamples && i < static_cast<int>(outBuffer.size()); ++i)
             {
+                sum += outBuffer[i];
                 float mixed = buffer[i] + outBuffer[i];
                 if (mixed > 1.0f)
                     mixed = 1.0f;
                 if (mixed < -1.0f)
                     mixed = -1.0f;
                 buffer[i] = mixed;
+            }
+            if (sum != 0.0f) {
+                Console::AppendConsoleLine("[debug] Output module " + std::to_string(module.ID) + " buffer sum: " + std::to_string(sum));
+            } else {
+                Console::AppendConsoleLine("[debug] Output module " + std::to_string(module.ID) + " buffer is silent");
             }
         }
     }

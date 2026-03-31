@@ -1,5 +1,6 @@
 #include <algorithm>
 #include "MDU/ModuleLoader.h"
+#include "../Functions/ConsoleHandling.h"
 
 #include <cstdlib>
 #if defined(_WIN32)
@@ -444,17 +445,21 @@ namespace MDU
 			}
 	#else
 			std::cerr << "[MDU DEBUG] Compiling module with command: " << command << std::endl;
+			Console::AppendConsoleLine("[debug] Compiling module with command: " + command);
 			output = "";
 			ReturnCode = std::system(command.c_str());
 	#endif
 			if (ReturnCode != 0) {
 				if (errorOut) {
 					*errorOut = "[MLD002] Failed compiling module: " + mduPath + " (exit code " + std::to_string(ReturnCode) + ")\nCommand: " + command + "\nOutput:\n" + output;
+					Console::AppendConsoleLine("[MLD002] Failed compiling module: " + mduPath + " (exit code " + std::to_string(ReturnCode) + ")\nCommand: " + command + "\nOutput:\n" + output);
 				}
 				std::cerr << "[MDU DEBUG] Module compile failed!" << std::endl;
+				Console::AppendConsoleLine("[MDU DEBUG] Module compile failed: " + mduPath);
 				return false;
 			}
-			std::cerr << "[MDU DEBUG] Module compile succeeded." << std::endl;
+			std::cerr << "[MDU DEBUG] Module compile succeeded." << mduPath << std::endl;
+			Console::AppendConsoleLine("[MDU DEBUG] Module compile succeeded: " + mduPath);
 			return true;
 	}
 

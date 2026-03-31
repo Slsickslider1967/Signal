@@ -9,6 +9,7 @@ set(PYTHON_EXECUTABLE ${Python3_EXECUTABLE})
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+
 include(FetchContent)
 
 # ---------- External dependencies (fetched, target-based) ----------
@@ -36,6 +37,7 @@ FetchContent_MakeAvailable(glad)
 add_subdirectory(${glad_SOURCE_DIR}/cmake glad_cmake)
 glad_add_library(glad_gl_core_33 REPRODUCIBLE API gl:core=3.3)
 
+
 FetchContent_Declare(
 	glfw
 	GIT_REPOSITORY https://github.com/glfw/glfw.git
@@ -52,6 +54,9 @@ if(NOT SDL2_FOUND)
 	)
 	FetchContent_MakeAvailable(sdl2)
 endif()
+
+include(FetchContent)
+
 
 # imnodes expects an imgui target name to be provided.
 set(IMNODES_IMGUI_TARGET_NAME imgui)
@@ -106,7 +111,6 @@ add_library(imgui_knobs_lib STATIC
 target_include_directories(imgui_knobs_lib PUBLIC ${imgui_knobs_SOURCE_DIR})
 target_link_libraries(imgui_knobs_lib PUBLIC imgui)
 
-
 # ---------- Application target ----------
 
 
@@ -123,6 +127,8 @@ add_executable(Signals
 	src/Audio/CV.cpp
 	src/Audio/WaveForm.cpp
 	src/Functions/ConsoleHandling.cpp
+	src/Audio/Record.cpp
+	src/Audio/MIDIHandling.cpp
 )
 
 	# Export executable symbols for dlopen modules (Linux/Unix only)
