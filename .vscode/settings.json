@@ -1,5 +1,8 @@
 {
   "git.detectSubmodules": false,
+  "cmake.useCMakePresets": "always",
+  "cmake.configurePreset": "linux-gcc",
+  "cmake.buildPreset": "linux-gcc-build",
   "files.associations": {
     "*.mdu": "cpp"
   },

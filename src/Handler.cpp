@@ -3,6 +3,7 @@
 #include <cctype>
 #include <cstdlib>
 #include <filesystem>
+#include <limits.h>
 #include <system_error>
 #include <iostream>
 #include <list>
@@ -13,64 +14,51 @@
 #include <thread>
 #include <vector>
 
+#if defined(__linux__) || defined(__unix__) || defined(__APPLE__)
+#include <unistd.h>
+#endif
+
+#if defined(_WIN32)
+#ifndef WIN32_LEAN_AND_MEAN
+#define WIN32_LEAN_AND_MEAN
+#endif
+#ifndef NOMINMAX
+#define NOMINMAX
+#endif
+#include <windows.h>
+#endif
+
 #include "imgui.h"
-#include "imgui-knobs.h"
-#include "imgui_stdlib.h"
-#include "implot.h"
-#include "imnodes.h"
 #include "Audio/Audio.h"
+#include "Draw/Draw.h"
 #include "Draw/ImGuiUtil.h"
-#include "Functions/Module.h"
 #include "Draw/Window.h"
 #include "MDU/FileWatcher.h"
-#include "MDU/ModuleLoader.h"
 #include "Functions/ConsoleHandling.h"
-#include "MDU/CreateMDU.h"
-#include "Audio/Record.h"
+#include "HandlerShared.h"
 
-struct Rack
-{
-    int ID;
-    std::string Name;
-    std::list<DynamicModule> DynamicModules;
-    std::vector<Link> Links;
-    bool Enabled = true;
-};
+int NextRackID = 1;
+int NextModuleID = 1;
+int NextLinkID = 1;
+int SelectedModuleID = -1;
+int SelectedRackID = -1;
 
-static int NextRackID = 1;
-static int NextModuleID = 1;
-static int NextLinkID = 1;
-static int SelectedModuleID = -1;
-static int SelectedRackID = -1;
+std::list<Rack> Racks;
 
-static std::list<Rack> Racks;
-
-static MDU::ModuleLoader GModuleLoader;
+MDU::ModuleLoader GModuleLoader;
 static MDU::FileWatcher GFileWatcher;
 
-static std::mutex GRackMutex;
+std::mutex GRackMutex;
 
-static std::string GLastMduError;
+std::string GLastMduError;
 
-static std::map<int, std::vector<float>> GModuleScopeInputs;
-static std::map<int, std::vector<float>> GModuleScopeOutputs;
+std::map<int, std::vector<float>> GModuleScopeInputs;
+std::map<int, std::vector<float>> GModuleScopeOutputs;
 
 static bool GFileWatcherInitialized = false;
-static bool GShowDebugConsole = false;
-static bool IsRecording = false;
+bool GShowDebugConsole = false;
+bool IsRecording = false;
 // boolording = false;
-
-void MainWindow();
-void CleanUp();
-void Render();
-
-void Debug();
-void DrawRackEditor(Rack &rack);
-void DrawTopBar();
-void DrawLinks(Rack &rack);
-void CreateLinks(Rack &rack);
-void DrawModuleDetails();
-void AddPins(const DynamicModule &module);
 
 void SetupAudioHandling();
 void ShutdownAudioHandling();
@@ -82,10 +70,7 @@ void DeleteRack(int rackID);
 bool AddDynamicModuleToRack(Rack &rack, const std::string &sourcePath, std::string *errorOut);
 void RemoveDynamicModuleFromRack(DynamicModule &module);
 void RemoveNode(int nodeID);
-bool PopUpTool(Rack &rack);
-void DrawAvailableModulesChild(Rack &rack);
-Rack *FindRackByID(int rackID);
-void LaunchDefaultFileManager(const std::filesystem::path &path = {});
+void LaunchDefaultFileManager(const std::filesystem::path &path);
 std::filesystem::path GetDefaultTemplatePath();
 
 std::vector<std::string> BuildMduRuntimePaths();
@@ -121,40 +106,6 @@ void CaptureScopeSamples(std::map<int, std::vector<float>> &scopeMap,
     }
 }
 
-void DrawScopeOverlay(const std::vector<float> *inputSamples,
-                      const std::vector<float> *outputSamples,
-                      const char *plotLabel)
-{
-    if (inputSamples == nullptr || outputSamples == nullptr)
-    {
-        return;
-    }
-
-    if (inputSamples->empty() || outputSamples->empty())
-    {
-        return;
-    }
-
-    ImPlotFlags plotFlags = ImPlotFlags_NoMenus |
-                            ImPlotFlags_NoBoxSelect |
-                            ImPlotFlags_NoMouseText;
-    ImPlotAxisFlags axisFlags = ImPlotAxisFlags_NoDecorations |
-                                ImPlotAxisFlags_Lock;
-
-    if (ImPlot::BeginPlot(plotLabel, ImVec2(-1.0f, 170.0f), plotFlags))
-    {
-        int sampleCount = std::min(static_cast<int>(inputSamples->size()), static_cast<int>(outputSamples->size()));
-        ImPlot::SetupAxes(nullptr, nullptr, axisFlags, axisFlags);
-        ImPlot::SetupAxisLimits(ImAxis_X1, 0.0, static_cast<double>(sampleCount), ImGuiCond_Always);
-        ImPlot::SetupAxisLimits(ImAxis_Y1, -1.1, 1.1, ImGuiCond_Always);
-
-        ImPlot::PlotLine("Input", inputSamples->data(), sampleCount);
-
-        ImPlot::PlotLine("Output", outputSamples->data(), sampleCount);
-
-        ImPlot::EndPlot();
-    }
-}
 
 std::vector<DynamicModule *> BuildProcessingOrder(Rack &rack)
 {
@@ -257,20 +208,10 @@ const float *FindLinkedOutputBuffer(const Rack &rack,
     return nullptr;
 }
 
-int MakeInputAttributeID(int moduleID, int pinIndex)
-{
-    return moduleID * 1000 + 100 + pinIndex;
-}
-
-int MakeOutputAttributeID(int moduleID, int pinIndex)
-{
-    return moduleID * 1000 + pinIndex;
-}
-
 int main()
 {
     GModuleLoader.SetTemplatePath(GetDefaultTemplatePath().string());
-    MainWindow();
+    Draw::MainWindow();
 
     while (!Window::ShouldClose())
     {
@@ -278,13 +219,15 @@ int main()
 
         std::lock_guard<std::mutex> rackLock(GRackMutex);
 
-        DrawTopBar();
+        Draw::DrawTopBar();
 
         ImGuiViewport *mainViewport = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(mainViewport->WorkPos);
         ImGui::SetNextWindowSize(mainViewport->WorkSize);
         #if defined(__linux__) || defined(__unix__) || defined(__APPLE__)
+        #ifdef IMGUI_HAS_VIEWPORT
             ImGui::SetNextWindowViewport(mainViewport->ID);
+        #endif
         #endif
 
         ImGuiWindowFlags rackManagerFlags =
@@ -315,8 +258,8 @@ int main()
 
             if (rackOpen)
             {
-                DrawRackEditor(rack);
-                if (PopUpTool(rack))
+                Draw::DrawRackEditor(rack);
+                if (Draw::PopUpTool(rack))
                 {
                     ImGui::TreePop();
                     int rackIDToDelete = rack.ID;
@@ -337,12 +280,12 @@ int main()
 
         if (SelectedModuleID != -1)
         {
-            DrawModuleDetails();
+            Draw::DrawModuleDetails();
         }
 
         ImGuiUtil::End();
 
-        Render();
+        Draw::Render();
 
         UpdateAudioWaveFormsFromRacks();
         ProcessMduFileChanges();
@@ -350,541 +293,8 @@ int main()
         std::this_thread::sleep_for(std::chrono::milliseconds(16));
     }
 
-    CleanUp();
+    Draw::CleanUp();
     return 0;
-}
-
-// --Draw--
-
-
-
-void DrawTopBar()
-{
-
-    if (ImGui::BeginMainMenuBar())
-    {
-        if (ImGui::BeginMenu("Rack"))
-        {
-            if (ImGui::MenuItem("Add Rack"))
-            {
-                CreateRack(std::string("Rack ") + std::to_string(NextRackID));
-            }
-            if (ImGui::BeginMenu("Remove Rack"))
-            {
-                if (Racks.empty())
-                {
-                    ImGui::TextDisabled("No racks to remove");
-                }
-                else
-                {
-                    int rackIDToDelete = -1;
-                    for (const auto &rack : Racks)
-                    {
-                        std::string label = "Rack #" + std::to_string(rack.ID) + ": " + rack.Name;
-                        if (ImGui::MenuItem(label.c_str()))
-                        {
-                            rackIDToDelete = rack.ID;
-                        }
-                    }
-                    if (rackIDToDelete != -1)
-                    {
-                        DeleteRack(rackIDToDelete);
-                    }
-                }
-                ImGui::EndMenu();
-            }
-            ImGui::EndMenu();
-        }
-        if (ImGui::BeginMenu("Modules"))
-        {
-            if (ImGui::BeginMenu("Add Module to Selected Rack"))
-            {
-                Rack *selectedRack = FindRackByID(SelectedRackID);
-                if (selectedRack == nullptr)
-                {
-                    ImGui::TextDisabled("Select a Rack First");
-                }
-                else
-                {
-                    DrawAvailableModulesChild(*selectedRack);
-                }
-                ImGui::EndMenu();
-            }
-            ImGui::EndMenu();
-        }
-        static bool showSaveDialog = false;
-        static bool popupJustOpened = false;
-        static char saveFileName[256] = "";
-        if (ImGui::BeginMenu("Record"))
-        {
-            if (ImGui::MenuItem("Start Recording"))
-            {
-                Record::OpenWavForRecording("");
-                Record::StartRecording();
-                IsRecording = true;
-            }
-            if (ImGui::MenuItem("Stop Recording"))
-            {
-                Record::StopRecording();
-                IsRecording = false;
-            }
-            ImGui::Separator();
-            if (ImGui::MenuItem("Save Last Recording"))
-            {
-                showSaveDialog = true;
-                popupJustOpened = true;
-                strcpy(saveFileName, "recording.wav");
-            }
-            if (ImGui::MenuItem("Recording Settings"))
-            {
-                Console::AppendConsoleLine("[info] Recording settings opened (not implemented)");
-            }
-            ImGui::EndMenu();
-        }
-
-        // Popup logic must be outside the menu block
-        if (showSaveDialog && popupJustOpened)
-        {
-            ImGui::OpenPopup("Save Recording As");
-            popupJustOpened = false;
-        }
-        if (ImGui::BeginPopupModal("Save Recording As", NULL, ImGuiWindowFlags_AlwaysAutoResize))
-        {
-            ImGui::InputText("File Name", saveFileName, IM_ARRAYSIZE(saveFileName));
-            if (ImGui::Button("Save"))
-            {
-                std::string fullPath = std::string(getenv("HOME") ? getenv("HOME") : "") + "/Documents/Signal/Recordings/" + saveFileName;
-                Record::SetWavPath(fullPath);
-                Record::SaveLastRecording();
-                showSaveDialog = false;
-                ImGui::CloseCurrentPopup();
-            }
-            ImGui::SameLine();
-            if (ImGui::Button("Cancel"))
-            {
-                showSaveDialog = false;
-                ImGui::CloseCurrentPopup();
-            }
-            ImGui::EndPopup();
-        }
-        if (ImGui::BeginMenu("File"))
-        {
-            if (ImGui::MenuItem("Open Template Folder"))
-            {
-                LaunchDefaultFileManager(GModuleLoader.GetTemplatePath());
-            }
-            if (ImGui::MenuItem("Open Recordings Folder"))
-            {
-                const char* home = std::getenv("HOME");
-                std::filesystem::path recordingsPath;
-                if (home && *home) 
-                {
-                    recordingsPath = std::filesystem::path(home) / "Documents" / "Signal";
-                } 
-                else 
-                {
-                    recordingsPath = std::filesystem::current_path() / "documents" / "signal";
-                }
-
-                LaunchDefaultFileManager(recordingsPath);
-            }
-            ImGui::Separator();
-            if (ImGui::MenuItem("Create Template MDU"))
-            {
-                MDU::CreateTemplateMDU(GModuleLoader.GetTemplatePath());
-            }
-            ImGui::Separator();
-            if (ImGui::BeginMenu("Set MDU Search Paths"))
-            {
-                std::string newPath;
-                if (ImGui::InputText("New Path", &newPath, ImGuiInputTextFlags_EnterReturnsTrue))
-                {
-                    if (!newPath.empty())
-                    {
-                        GModuleLoader.AddSearchPath(newPath);
-                    }
-                    else
-                    {
-                        Console::AppendConsoleLine("[warning] Cannot add empty path to MDU search paths.");
-                    }
-                }
-                ImGui::Separator();
-                const auto &searchPaths = GModuleLoader.GetSearchPaths();
-                if (searchPaths.empty())
-                {
-                    ImGui::TextDisabled("No search paths set");
-                }
-                else
-                {
-                    for (const auto &path : searchPaths)
-                    {
-                        ImGui::Text("%s", path.c_str());
-                    }
-                }
-                ImGui::EndMenu();
-            }
-            ImGui::EndMenu();
-        }
-        if (ImGui::BeginMenu("Help"))
-        {
-            if (ImGui::MenuItem("Documentation"))
-            {
-                std::string command = "xdg-open https://github.com/Slsickslider1967/Signal/wiki";
-                std::system(command.c_str());
-            }
-            if (ImGui::MenuItem("GitHub Repository"))
-            {
-                std::string command = "xdg-open https://github.com/Slsickslider1967/Signal";
-                std::system(command.c_str());
-            }
-            ImGui::Separator();
-            if (ImGui::MenuItem("Console"))
-            {
-                GShowDebugConsole = true;
-            }
-            ImGui::EndMenu();
-        }
-        if (IsRecording)
-        {
-            ImDrawList* draw_list = ImGui::GetWindowDrawList();
-            ImVec2 bar_pos = ImGui::GetWindowPos();
-            ImVec2 bar_size = ImGui::GetWindowSize();
-            ImVec2 circle_center = ImVec2(bar_pos.x + bar_size.x - 20.0f, bar_pos.y + bar_size.y / 2.0f);
-            float radius = 7.0f;
-            draw_list->AddCircleFilled(circle_center, radius, IM_COL32(255, 0, 0, 255));
-        }
-        ImGui::EndMainMenuBar();
-    }
-
-    Debug();
-}
-
-
-
-void Debug()
-{
-    if (!GShowDebugConsole)
-    {
-        return;
-    }
-
-    ImGui::SetNextWindowSize(ImVec2(900, 420), ImGuiCond_FirstUseEver);
-    ImGui::Begin("Debug Console", &GShowDebugConsole);
-
-    ImGui::SameLine();
-
-    ImGui::SameLine();
-    if (ImGui::Button("Clear Output"))
-    {
-        Console::ClearConsoleOutput();
-    }
-
-    ImGui::SameLine();
-    ImGui::Checkbox("Auto-scroll", Console::AutoScrollFlag());
-
-    ImGui::Separator();
-
-    if (ImGui::BeginChild("ConsoleOutput", ImVec2(0, 0), true, ImGuiWindowFlags_HorizontalScrollbar))
-    {
-        std::vector<std::string> lines = Console::GetConsoleLinesSnapshot();
-        for (const std::string &line : lines)
-        {
-            ImGui::TextUnformatted(line.c_str());
-        }
-
-        if (*Console::AutoScrollFlag() && ImGui::GetScrollY() >= ImGui::GetScrollMaxY() - 10.0f)
-        {
-            ImGui::SetScrollHereY(1.0f);
-        }
-    }
-    ImGui::EndChild();
-
-    ImGui::End();
-}
-
-void MainWindow()
-{
-    #if (defined(__linux__) || defined(__unix__) || defined(__APPLE__))
-        setenv("PREFER_X11", "1", 1);
-    #endif
-    int Width = 1020;
-    int Height = 720;
-    Window::CreateWindow(Width, Height, "Signal Handler");
-    Console::AppendConsoleLine("Window initialized: Signal Handler (" + std::to_string(Width) + "x" + std::to_string(Height) + ")");
-    SetupAudioHandling();
-    Window::PollEvents();
-}
-
-void CleanUp()
-{
-    Window::DestroyWindow();
-    ShutdownAudioHandling();
-}
-
-void Render()
-{
-    Window::ClearColor(0.08f, 0.08f, 0.10f, 1.0f);
-    ImGuiUtil::Render();
-    Window::SwapBuffers();
-    Window::PollEvents();
-}
-
-void DrawRackEditor(Rack &rack)
-{
-    ImNodes::BeginNodeEditor();
-    if (ImNodes::IsEditorHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
-    {
-        SelectedRackID = rack.ID;
-        SelectedModuleID = -1;
-    }
-
-    bool openContextMenu = ImNodes::IsEditorHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right);
-
-    for (auto moduleIt = rack.DynamicModules.begin(); moduleIt != rack.DynamicModules.end(); ++moduleIt)
-    {
-        DynamicModule &module = *moduleIt;
-
-        ImNodes::PushAttributeFlag(ImNodesAttributeFlags_EnableLinkDetachWithDragClick);
-        ImNodes::BeginNode(module.ID);
-
-        AddPins(module);
-
-        ImGui::Text("MDU: %s", module.Name.c_str());
-        if (!module.Metadata.Author.empty())
-        {
-            ImGui::TextDisabled("by %s", module.Metadata.Author.c_str());
-        }
-
-        ImNodes::EndNode();
-        ImNodes::PopAttributeFlag();
-
-        if (ImNodes::IsNodeSelected(module.ID))
-        {
-            SelectedModuleID = module.ID;
-        }
-    }
-
-    DrawLinks(rack);
-    ImNodes::EndNodeEditor();
-
-    if (openContextMenu)
-    {
-        ImGui::OpenPopup("RackContextMenu");
-    }
-
-    CreateLinks(rack);
-
-    int deletedLinkID = 0;
-    if (ImNodes::IsLinkDestroyed(&deletedLinkID))
-    {
-        rack.Links.erase(
-            std::remove_if(rack.Links.begin(), rack.Links.end(),
-                           [deletedLinkID](const Link &link)
-                           { return link.ID == deletedLinkID; }),
-            rack.Links.end());
-    }
-}
-
-void DrawLinks(Rack &rack)
-{
-    for (const auto &link : rack.Links)
-    {
-        ImNodes::Link(link.ID,
-                      MakeOutputAttributeID(link.StartModuleID, link.StartPinIndex),
-                      MakeInputAttributeID(link.EndModuleID, link.EndPinIndex));
-    }
-}
-
-void CreateLinks(Rack &rack)
-{
-    int startAttr = 0;
-    int endAttr = 0;
-    if (ImNodes::IsLinkCreated(&startAttr, &endAttr))
-    {
-        int startModuleID = startAttr / 1000;
-        int endModuleID = endAttr / 1000;
-        int startPin = startAttr % 1000;
-        int endPin = endAttr % 1000;
-
-        bool isStartOutput = (startPin < 100);
-        bool isEndInput = (endPin >= 100);
-        if (!isStartOutput || !isEndInput)
-        {
-            return;
-        }
-
-        bool linkExists = false;
-        for (const auto &link : rack.Links)
-        {
-            if (link.StartModuleID == startModuleID && link.EndModuleID == endModuleID)
-            {
-                linkExists = true;
-                break;
-            }
-        }
-
-        if (!linkExists)
-        {
-            Link newLink;
-            newLink.ID = NextLinkID++;
-            newLink.StartModuleID = startModuleID;
-            newLink.EndModuleID = endModuleID;
-            newLink.StartPinIndex = startPin;
-            newLink.EndPinIndex = endPin - 100;
-            rack.Links.push_back(newLink);
-        }
-    }
-}
-
-void AddPins(const DynamicModule &module)
-{
-    for (int i = 0; i < module.InPins; ++i)
-    {
-        std::string label = "In";
-        if (i < static_cast<int>(module.Metadata.InputPins.size()))
-        {
-            const auto &pin = module.Metadata.InputPins[i];
-            if (!pin.label.empty())
-            {
-                label = pin.label;
-            }
-            else if (!pin.ID.empty())
-            {
-                label = pin.ID;
-            }
-        }
-
-        ImNodes::BeginInputAttribute(MakeInputAttributeID(module.ID, i));
-        ImGui::Text("%s", label.c_str());
-        ImNodes::EndInputAttribute();
-    }
-
-    for (int i = 0; i < module.OutPins; ++i)
-    {
-        std::string label = "Out";
-        if (i < static_cast<int>(module.Metadata.OutputPins.size()))
-        {
-            const auto &pin = module.Metadata.OutputPins[i];
-            if (!pin.label.empty())
-            {
-                label = pin.label;
-            }
-            else if (!pin.ID.empty())
-            {
-                label = pin.ID;
-            }
-        }
-
-        ImNodes::BeginOutputAttribute(MakeOutputAttributeID(module.ID, i));
-        ImGui::Text("%s", label.c_str());
-        ImNodes::EndOutputAttribute();
-    }
-}
-
-void DrawModuleDetails()
-{
-    DynamicModule *selectedModule = nullptr;
-    for (auto &rack : Racks)
-    {
-        for (auto &module : rack.DynamicModules)
-        {
-            if (module.ID == SelectedModuleID)
-            {
-                selectedModule = &module;
-                break;
-            }
-        }
-        if (selectedModule != nullptr)
-        {
-            break;
-        }
-    }
-
-    if (selectedModule == nullptr)
-    {
-        SelectedModuleID = -1;
-        return;
-    }
-
-    bool windowOpen = true;
-    ImGui::SetNextWindowSize(ImVec2(520.0f, 760.0f), ImGuiCond_FirstUseEver);
-    ImGui::SetNextWindowSizeConstraints(ImVec2(400.0f, 460.0f), ImVec2(1400.0f, 1800.0f));
-    std::string windowTitle = "Module Panel: " + selectedModule->Name + " #" + std::to_string(selectedModule->ID);
-    ImGui::Begin(windowTitle.c_str(), &windowOpen);
-
-    ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.11f, 0.12f, 0.13f, 1.0f));
-    ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 6.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 5.0f);
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(10.0f, 8.0f));
-
-    if (ImGui::BeginChild("ModuleFaceplate", ImVec2(0.0f, 0.0f), true))
-    {
-        ImGui::Text("%s", selectedModule->Name.c_str());
-        ImGui::SameLine();
-        ImGui::TextDisabled("[%s]", selectedModule->Metadata.ModuleType.c_str());
-
-        ImGui::InputText("Module Name", &selectedModule->Name);
-        ImGui::Checkbox("Module Active", &selectedModule->Active);
-        ImGui::Separator();
-
-        ImGui::Text("I/O");
-        ImGui::Separator();
-        ImGui::Text("Input Jacks: %d", selectedModule->InPins);
-        ImGui::SameLine();
-        ImGui::Text("Output Jacks: %d", selectedModule->OutPins);
-
-        if (selectedModule->Instance != nullptr)
-        {
-            selectedModule->Instance->DrawEditor();
-        }
-
-        ImGui::Spacing();
-        ImGui::Separator();
-        ImGui::Text("Signal Scope");
-        auto inputIt = GModuleScopeInputs.find(selectedModule->ID);
-        auto outputIt = GModuleScopeOutputs.find(selectedModule->ID);
-
-        if (inputIt == GModuleScopeInputs.end() || outputIt == GModuleScopeOutputs.end())
-        {
-            ImGui::TextDisabled("No scope data yet. Start audio and run the patch.");
-        }
-        else
-        {
-            DrawScopeOverlay(&inputIt->second, &outputIt->second, "Input vs Output");
-
-            float peakOut = 0.0f;
-            for (float sample : outputIt->second)
-            {
-                float amplitude = sample < 0.0f ? -sample : sample;
-                if (amplitude > peakOut)
-                {
-                    peakOut = amplitude;
-                }
-            }
-            if (peakOut > 1.0f)
-                peakOut = 1.0f;
-        }
-    }
-
-    ImGui::EndChild();
-    ImGui::PopStyleVar(3);
-    ImGui::PopStyleColor();
-
-    bool requestRemove = ImGui::Button("Remove Module", ImVec2(-1.0f, 0.0f));
-    ImGui::End();
-
-    if (requestRemove)
-    {
-        Console::AppendConsoleLine("Remove Module clicked for module #" + std::to_string(selectedModule->ID) + " (" + selectedModule->Name + ")");
-        RemoveNode(selectedModule->ID);
-        SelectedModuleID = -1;
-        return;
-    }
-
-    if (!windowOpen)
-    {
-        SelectedModuleID = -1;
-    }
 }
 
 // --Audio Handling--
@@ -1137,92 +547,6 @@ void RemoveNode(int nodeID)
     }
 }
 
-bool PopUpTool(Rack &rack)
-{
-    bool requestDelete = false;
-    if (ImGui::BeginPopupModal("RackContextMenu"))
-    {
-        if (ImGui::InputText("Rack Name", &rack.Name, ImGuiInputTextFlags_EnterReturnsTrue))
-        {
-            ImGui::CloseCurrentPopup();
-        }
-
-        ImGui::Separator();
-        ImGui::Text("Available Modules");
-        DrawAvailableModulesChild(rack);
-
-        ImGui::Separator();
-        if (ImGui::Selectable("Remove Rack"))
-        {
-            requestDelete = true;
-            ImGui::CloseCurrentPopup();
-        }
-
-        if (ImGui::IsKeyPressed(ImGuiKey_Escape))
-        {
-            ImGui::CloseCurrentPopup();
-        }
-
-        ImGui::EndPopup();
-    }
-    return requestDelete;
-}
-
-void DrawAvailableModulesChild(Rack &rack)
-{
-    if (!ImGui::BeginChild("AvailableModulesChild", ImVec2(0.0f, 220.0f), true))
-    {
-        ImGui::EndChild();
-        return;
-    }
-
-    const auto &loadedModules = GModuleLoader.GetLoadedModules();
-    ImGui::Text("Loaded: %d", static_cast<int>(loadedModules.size()));
-    if (loadedModules.empty())
-    {
-        ImGui::TextDisabled("No loaded .mdu modules");
-        if (!GLastMduError.empty())
-        {
-            ImGui::Separator();
-            ImGui::TextWrapped("Last loader error: %s", GLastMduError.c_str());
-        }
-    }
-    else
-    {
-        for (const auto &entry : loadedModules)
-        {
-            const std::string &sourcePath = entry.first;
-            const auto &loadedModule = entry.second;
-
-            std::string label = loadedModule.Metadata.ModuleName.empty() ? sourcePath : loadedModule.Metadata.ModuleName;
-
-            if (ImGui::Selectable(label.c_str(), false, ImGuiSelectableFlags_DontClosePopups))
-            {
-                std::string error;
-                AddDynamicModuleToRack(rack, sourcePath, &error);
-                if (!error.empty())
-                {
-                    std::cerr << error << std::endl;
-                }
-            }
-        }
-    }
-
-    ImGui::EndChild();
-}
-
-Rack *FindRackByID(int rackID)
-{
-    for (auto &rack : Racks)
-    {
-        if (rack.ID == rackID)
-        {
-            return &rack;
-        }
-    }
-    return nullptr;
-}
-
 void LaunchDefaultFileManager(const std::filesystem::path &path)
 {
     std::filesystem::path target = path;
@@ -1342,37 +666,72 @@ std::vector<std::string> BuildMduRuntimePaths()
         return environmentPaths;
     }
 
-    std::vector<std::string> candidates = {
-        "src/Modules",
-        "modules",
-        "../src/Modules",
-        "../modules"};
-
-    std::vector<std::string> validPaths;
-    validPaths.reserve(candidates.size());
-
-    for (const auto &candidate : candidates)
+    auto FirstExisting = [](const std::vector<std::filesystem::path> &candidates) -> std::vector<std::string>
     {
-        std::error_code errorCode;
-        std::filesystem::path absolutePath = std::filesystem::absolute(candidate, errorCode);
-        if (errorCode)
+        for (const auto &candidate : candidates)
         {
-            continue;
+            std::error_code errorCode;
+            const std::filesystem::path absolutePath = std::filesystem::absolute(candidate, errorCode);
+            if (errorCode)
+            {
+                continue;
+            }
+
+            std::error_code existsError;
+            if (!std::filesystem::exists(absolutePath, existsError) || existsError)
+            {
+                continue;
+            }
+
+            return {absolutePath.lexically_normal().string()};
         }
 
-        if (std::filesystem::exists(absolutePath, errorCode) && !errorCode)
+        return {};
+    };
+
+    std::vector<std::filesystem::path> bundledCandidates;
+    std::vector<std::filesystem::path> sourceCandidates;
+
+#if defined(__linux__) || defined(__unix__) || (defined(__APPLE__))
+    {
+        std::vector<char> executablePath(static_cast<size_t>(PATH_MAX) + 1u, '\0');
+        ssize_t read = ::readlink("/proc/self/exe", executablePath.data(), executablePath.size() - 1u);
+        if (read > 0)
         {
-            validPaths.push_back(absolutePath.lexically_normal().string());
+            executablePath[static_cast<size_t>(read)] = '\0';
+            std::filesystem::path executableDir = std::filesystem::path(executablePath.data()).parent_path();
+            bundledCandidates.push_back(executableDir / "modules");
+            bundledCandidates.push_back(executableDir / "../share/Signal/modules");
         }
     }
+#endif
 
-    if (validPaths.empty())
+#if defined(_WIN32)
     {
-        validPaths.push_back("src/Modules");
-        validPaths.push_back("modules");
+        std::vector<char> executablePath(static_cast<size_t>(MAX_PATH) + 1u, '\0');
+        DWORD length = ::GetModuleFileNameA(nullptr, executablePath.data(), static_cast<DWORD>(executablePath.size()));
+        if (length > 0 && length < executablePath.size())
+        {
+            executablePath[static_cast<size_t>(length)] = '\0';
+            std::filesystem::path executableDir = std::filesystem::path(executablePath.data()).parent_path();
+            bundledCandidates.push_back(executableDir / "modules");
+            bundledCandidates.push_back(executableDir / ".." / "share" / "Signal" / "modules");
+        }
+    }
+#endif
+
+    sourceCandidates.push_back("src/Modules");
+    sourceCandidates.push_back("modules");
+    sourceCandidates.push_back("../src/Modules");
+    sourceCandidates.push_back("../modules");
+
+    const auto bundledPaths = FirstExisting(bundledCandidates);
+    if (!bundledPaths.empty())
+    {
+        return bundledPaths;
     }
 
-    return validPaths;
+    return FirstExisting(sourceCandidates);
 }
 
 void RemoveLinksForModule(Rack &rack, int moduleID)

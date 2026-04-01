@@ -131,6 +131,15 @@ add_executable(Signals
 	src/Audio/MIDIHandling.cpp
 )
 
+add_custom_command(TARGET Signals POST_BUILD
+	COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:Signals>/modules"
+	COMMAND ${CMAKE_COMMAND} -E copy_directory
+		"${CMAKE_SOURCE_DIR}/modules"
+		"$<TARGET_FILE_DIR:Signals>/modules"
+	COMMENT "Copying runtime MDU modules"
+)
+
+
 	# Export executable symbols for dlopen modules (Linux/Unix only)
 	if(NOT WIN32)
 		set_target_properties(Signals PROPERTIES LINK_FLAGS "-Wl,--export-dynamic")
@@ -160,6 +169,9 @@ target_link_libraries(Signals PRIVATE
 if(NOT WIN32)
 	target_link_libraries(Signals PRIVATE dl)
 endif()
+
+install(TARGETS Signals RUNTIME DESTINATION bin)
+install(DIRECTORY ${CMAKE_SOURCE_DIR}/modules/ DESTINATION bin/modules)
 
 
 add_dependencies(Signals glad_gl_core_33)
