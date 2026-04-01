@@ -1,7 +1,7 @@
 /*! Module
 ModuleName: "VCO"
 ModuleType: "Oscillator"
-ModuleVersion: "1.0.0"
+ModuleVersion: "1.1.0"
 Author: "Signal"
 
 Input Pins:
@@ -14,7 +14,7 @@ Output Pins:
 - id: audio_out, label: "Audio Out"
 
 Parameters:
-- id: frequency, label: "Frequency", type: knob, min: 20.0, max: 2000.0, default: 440.0
+- id: frequency, label: "Frequency", type: knob, min: 0.1, max: 5000.0, default: 440.0
 - id: amplitude, label: "Amplitude", type: knob, min: 0.0, max: 1.0, default: 0.8
 - id: fm_depth, label: "FM Depth", type: knob, min: 0.0, max: 1.0, default: 0.0
 - id: wave_type, label: "Wave Type", type: stepped, min: 0, max: 5, default: 0
@@ -59,11 +59,19 @@ public:
         const float *voctIn = (bufferView.InputPins.size() > 0) ? bufferView.InputPins[0] : nullptr;
         const float *fmIn = (bufferView.InputPins.size() > 1) ? bufferView.InputPins[1] : nullptr;
         const float *pwmIn = (bufferView.InputPins.size() > 2) ? bufferView.InputPins[2] : nullptr;
+        const float *syncIn = (bufferView.InputPins.size() > 3) ? bufferView.InputPins[3] : nullptr;
 
         const float sampleRate = (bufferView.SampleRate > 0) ? static_cast<float>(bufferView.SampleRate) : 44100.0f;
+        const float nyquist = sampleRate * 0.5f;
 
         for (size_t i = 0; i < bufferView.NumberOfSamples; ++i)
         {
+            if (syncIn != nullptr && syncIn[i] > 0.5f && !LastSyncState)
+            {
+                Phase = 0.0f;
+            }
+            LastSyncState = (syncIn != nullptr && syncIn[i] > 0.5f);
+
             float freq = Frequency;
             if (voctIn != nullptr)
             {
@@ -72,11 +80,17 @@ public:
 
             if (fmIn != nullptr)
             {
-                freq += fmIn[i] * 1000.0f * FMDepth;
+                freq += (fmIn[i] - 0.5f) * 1000.0f * FMDepth;
             }
-            if (freq < 1.0f)
+            
+            // Clamp frequency to valid range
+            if (freq < 0.1f)
             {
-                freq = 1.0f;
+                freq = 0.1f;
+            }
+            if (freq > nyquist * 0.9f)  // Prevent aliasing
+            {
+                freq = nyquist * 0.9f;
             }
 
             Phase += freq / sampleRate;
@@ -88,36 +102,59 @@ public:
             float sample = 0.0f;
             switch (WaveType)
             {
-            case 1:
+            case 1:  // Square wave with bandlimiting
+            {
+                float bandlimit = 1.0f;
+                if (freq > 0.0f)
+                {
+                    // Simple bandlimit: reduce aliasing for higher frequencies
+                    bandlimit = (nyquist - freq) / (nyquist * 0.5f);
+                    bandlimit = (bandlimit > 0.0f) ? bandlimit : 0.0f;
+                }
                 sample = (Phase < 0.5f) ? 1.0f : -1.0f;
+                sample *= bandlimit;
                 break;
-            case 2:
+            }
+            case 2:  // Sawtooth wave (band-limited)
+            {
                 sample = 2.0f * Phase - 1.0f;
+                float bandlimit = 1.0f;
+                if (freq > 0.0f)
+                {
+                    bandlimit = (nyquist - freq) / (nyquist * 0.4f);
+                    bandlimit = (bandlimit > 0.0f) ? bandlimit : 0.0f;
+                }
+                sample *= bandlimit;
                 break;
-            case 3:
+            }
+            case 3:  // Triangle wave
+            {
                 sample = (Phase < 0.5f) ? (4.0f * Phase - 1.0f) : (3.0f - 4.0f * Phase);
                 break;
-            case 4:
+            }
+            case 4:  // Pulse wave with PWM
             {
                 float duty = 0.5f;
                 if (pwmIn != nullptr)
                 {
-                    duty = 0.5f + pwmIn[i] * 0.45f;
+                    duty = 0.05f + (pwmIn[i] * 0.9f);
+                    if (duty < 0.05f) duty = 0.05f;
+                    if (duty > 0.95f) duty = 0.95f;
                 }
-                if (duty < 0.05f)
-                    duty = 0.05f;
-                if (duty > 0.95f)
-                    duty = 0.95f;
                 sample = (Phase < duty) ? 1.0f : -1.0f;
                 break;
             }
-            case 5:
+            case 5:  // White noise
+            {
                 NoiseState = NoiseState * 1664525u + 1013904223u;
                 sample = (static_cast<float>((NoiseState >> 8) & 0x00FFFFFF) / 8388607.5f) - 1.0f;
                 break;
-            default:
+            }
+            default:  // Sine wave
+            {
                 sample = std::sin(6.28318530718f * Phase);
                 break;
+            }
             }
 
             out[i] = sample * Amplitude;
@@ -127,8 +164,9 @@ public:
     void DrawEditor() override 
     {
         ImGui::PushID(this);
-            if (ImGui::SliderFloat("Frequency", &Frequency, 20.0f, 2000.0f, "%.1f Hz")) {}
+            if (ImGui::SliderFloat("Frequency", &Frequency, 20.0f, 5000.0f, "%.1f Hz")) {}
             if (ImGui::SliderFloat("Amplitude", &Amplitude, 0.0f, 1.0f, "%.2f")) {}
+            if (ImGui::SliderFloat("FM Depth", &FMDepth, 0.0f, 1.0f, "%.2f")) {}
             const char* items[] = {"Sine","Square","Saw","Tri","Pulse","Noise"};
             int w = WaveType;
             if (ImGui::Combo("Wave", &w, items, IM_ARRAYSIZE(items))) {
@@ -141,10 +179,10 @@ public:
     {
         if (parameterID == "frequency")
         {
-            if (outValue < 20.0f)
-                outValue = 20.0f;
-            if (outValue > 2000.0f)
-                outValue = 2000.0f;
+            if (outValue < 0.1f)
+                outValue = 0.1f;
+            if (outValue > 5000.0f)
+                outValue = 5000.0f;
             Frequency = outValue;
             return true;
         }
@@ -211,6 +249,7 @@ private:
     int WaveType = 0;
     float Phase = 0.0f;
     unsigned int NoiseState = 0x12345678u;
+    bool LastSyncState = false;  // For edge detection on sync input
 };
 
 MDU_REGISTER(VCOModule)

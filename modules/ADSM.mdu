@@ -1,0 +1,225 @@
+/*! Module
+ModuleName: "ADSM"
+ModuleType: "Envelope"
+ModuleVersion: "1.0.0"
+Author: "Signal"
+
+Input Pins:
+- id: trigger_in, label: "Trigger"
+- id: gate_in, label: "Gate"
+
+Output Pins:
+- id: envelope_out, label: "Envelope Out"
+
+Parameters:
+- id: attack, label: "Attack", type: knob, min: 0.01, max: 1000.0, default: 10.0
+- id: decay, label: "Decay", type: knob, min: 0.01, max: 1000.0, default: 100.0
+- id: sustain, label: "Sustain", type: knob, min: 0.0, max: 1.0, default: 0.5
+- id: release, label: "Release", type: knob, min: 0.01, max: 1000.0, default: 100.0
+*/
+
+#include <cmath>
+#include "mdu_api.h"
+#include "imgui.h"
+
+class ADSMModule final : public MDU::Module
+{
+public:
+    static MDU::MetaData BuildMetadata()
+    {
+        MDU::MetaData metadata;
+        metadata.ModuleName = "ADSM";
+        metadata.ModuleType = "Envelope";
+        metadata.ModuleVersion = "1.0.0";
+        metadata.Author = "Signal";
+
+        metadata.InputPins.push_back({"trigger_in", "Trigger"});
+        metadata.InputPins.push_back({"gate_in", "Gate"});
+        metadata.OutputPins.push_back({"envelope_out", "Envelope Out"});
+
+        metadata.Parameters.push_back({"attack", "Attack", MDU::ParameterType::Knob, 0.01f, 1000.0f, 10.0f, {}});
+        metadata.Parameters.push_back({"decay", "Decay", MDU::ParameterType::Knob, 0.01f, 1000.0f, 100.0f, {}});
+        metadata.Parameters.push_back({"sustain", "Sustain", MDU::ParameterType::Knob, 0.0f, 1.0f, 0.5f, {}});
+        metadata.Parameters.push_back({"release", "Release", MDU::ParameterType::Knob, 0.01f, 1000.0f, 100.0f, {}});
+
+        return metadata;
+    }
+
+    void Process(const MDU::BufferView &bufferView, float /*value*/) override
+    {
+        if (bufferView.OutputPins.empty() || bufferView.OutputPins[0] == nullptr)
+        {
+            return;
+        }
+
+        const float *triggerIn = (bufferView.InputPins.size() > 0) ? bufferView.InputPins[0] : nullptr;
+        const float *gateIn = (bufferView.InputPins.size() > 1) ? bufferView.InputPins[1] : nullptr;
+        float *out = bufferView.OutputPins[0];
+        const float sampleRate = (bufferView.SampleRate > 0) ? static_cast<float>(bufferView.SampleRate) : 44100.0f;
+
+        // Pre-calculate increments for attack, decay, release (in voltage/sample)
+        float attackInc = (Attack > 0.01f) ? (1.0f / (Attack * 0.001f * sampleRate)) : 1.0f;
+        float decayInc = (Decay > 0.01f) ? ((1.0f - Sustain) / (Decay * 0.001f * sampleRate)) : 1.0f;
+        float releaseInc = (Release > 0.01f) ? (Sustain / (Release * 0.001f * sampleRate)) : 1.0f;
+
+        for (size_t i = 0; i < bufferView.NumberOfSamples; ++i)
+        {
+            bool triggerRising = false;
+            if (triggerIn != nullptr && triggerIn[i] > 0.5f && !LastTriggerState)
+            {
+                triggerRising = true;
+                LastTriggerState = true;
+            }
+            if (triggerIn != nullptr && triggerIn[i] <= 0.5f)
+            {
+                LastTriggerState = false;
+            }
+
+            bool gateHigh = (gateIn != nullptr && gateIn[i] > 0.5f);
+
+            if (triggerRising)
+            {
+                State = ATTACK;
+            }
+
+            switch (State)
+            {
+            case ATTACK:
+                Envelope += attackInc;
+                if (Envelope >= 1.0f)
+                {
+                    Envelope = 1.0f;
+                    State = DECAY;
+                }
+                break;
+
+            case DECAY:
+                Envelope -= decayInc;
+                if (Envelope <= Sustain)
+                {
+                    Envelope = Sustain;
+                    State = SUSTAIN;
+                }
+                break;
+
+            case SUSTAIN:
+                Envelope = Sustain;
+                if (!gateHigh)
+                {
+                    State = RELEASE;
+                }
+                break;
+
+            case RELEASE:
+                Envelope -= releaseInc;
+                if (Envelope <= 0.0f)
+                {
+                    Envelope = 0.0f;
+                    State = IDLE;
+                }
+                break;
+
+            case IDLE:
+                Envelope = 0.0f;
+                break;
+            }
+
+            if (Envelope < 0.0f) Envelope = 0.0f;
+            if (Envelope > 1.0f) Envelope = 1.0f;
+
+            out[i] = Envelope;
+        }
+    }
+
+    void DrawEditor() override
+    {
+        ImGui::PushID(this);
+        ImGui::SliderFloat("Attack (ms)", &Attack, 0.01f, 1000.0f, "%.1f", ImGuiSliderFlags_Logarithmic);
+        ImGui::SliderFloat("Decay (ms)", &Decay, 0.01f, 1000.0f, "%.1f", ImGuiSliderFlags_Logarithmic);
+        ImGui::SliderFloat("Sustain", &Sustain, 0.0f, 1.0f, "%.2f");
+        ImGui::SliderFloat("Release (ms)", &Release, 0.01f, 1000.0f, "%.1f", ImGuiSliderFlags_Logarithmic);
+
+        const char *stateNames[] = {"Idle", "Attack", "Decay", "Sustain", "Release"};
+        ImGui::Text("State: %s", stateNames[State]);
+        ImGui::ProgressBar(Envelope, ImVec2(-1, 0), "");
+        ImGui::PopID();
+    }
+
+    bool SetParameter(const string &parameterID, float outValue) override
+    {
+        if (parameterID == "attack")
+        {
+            if (outValue < 0.01f) outValue = 0.01f;
+            if (outValue > 1000.0f) outValue = 1000.0f;
+            Attack = outValue;
+            return true;
+        }
+        if (parameterID == "decay")
+        {
+            if (outValue < 0.01f) outValue = 0.01f;
+            if (outValue > 1000.0f) outValue = 1000.0f;
+            Decay = outValue;
+            return true;
+        }
+        if (parameterID == "sustain")
+        {
+            if (outValue < 0.0f) outValue = 0.0f;
+            if (outValue > 1.0f) outValue = 1.0f;
+            Sustain = outValue;
+            return true;
+        }
+        if (parameterID == "release")
+        {
+            if (outValue < 0.01f) outValue = 0.01f;
+            if (outValue > 1000.0f) outValue = 1000.0f;
+            Release = outValue;
+            return true;
+        }
+        return false;
+    }
+
+    bool GetParameter(const string &parameterID, float &outValue) override
+    {
+        if (parameterID == "attack")
+        {
+            outValue = Attack;
+            return true;
+        }
+        if (parameterID == "decay")
+        {
+            outValue = Decay;
+            return true;
+        }
+        if (parameterID == "sustain")
+        {
+            outValue = Sustain;
+            return true;
+        }
+        if (parameterID == "release")
+        {
+            outValue = Release;
+            return true;
+        }
+        return false;
+    }
+
+private:
+    enum EnvelopeState
+    {
+        IDLE = 0,
+        ATTACK = 1,
+        DECAY = 2,
+        SUSTAIN = 3,
+        RELEASE = 4
+    };
+
+    float Attack = 10.0f;
+    float Decay = 100.0f;
+    float Sustain = 0.5f;
+    float Release = 100.0f;
+    float Envelope = 0.0f;
+    int State = IDLE;
+    bool LastTriggerState = false;
+};
+
+MDU_REGISTER(ADSMModule)

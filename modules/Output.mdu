@@ -1,7 +1,7 @@
 /*! Module
 ModuleName: "Output"
 ModuleType: "Output"
-ModuleVersion: "1.0.0"
+ModuleVersion: "1.1.0"
 Author: "Signal"
 
 Input Pins:
@@ -16,6 +16,7 @@ Parameters:
 
 #include "mdu_api.h"
 #include "imgui.h"
+#include <cmath>
 
 class OutputModule final : public MDU::Module
 {
@@ -61,14 +62,40 @@ public:
 
 		for (size_t i = 0; i < bufferView.NumberOfSamples; ++i)
 		{
-			output[i] = input[i] * OutputLevel;
+			float sample = input[i] * OutputLevel;
+			
+			sample = std::tanh(sample * 1.5f) * 0.67f;
+			
+			// Safety hard clamp to prevent extreme values
+			if (sample > 1.0f)
+				sample = 1.0f;
+			if (sample < -1.0f)
+				sample = -1.0f;
+			
+			// Track peak level for metering
+			float absSample = (sample < 0.0f) ? -sample : sample;
+			if (absSample > PeakLevel)
+			{
+				PeakLevel = absSample;
+			}
+			
+			output[i] = sample;
 		}
+		
+		PeakLevel *= 0.99f;
 	}
 
 	void DrawEditor() override
 	{
 		ImGui::PushID(this);
 		ImGui::SliderFloat("Output Level", &OutputLevel, 0.0f, 1.0f, "%.2f");
+		
+		ImGui::ProgressBar(PeakLevel, ImVec2(-1, 0), "Peak");
+		if (ImGui::IsItemClicked())
+		{
+			PeakLevel = 0.0f; 
+		}
+		
 		ImGui::PopID();
 	}
 
@@ -105,6 +132,7 @@ public:
 
 private:
 	float OutputLevel = 0.8f;
+	float PeakLevel = 0.0f; 
 };
 
 MDU_REGISTER(OutputModule)

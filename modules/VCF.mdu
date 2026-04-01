@@ -1,7 +1,7 @@
 /*! Module
 ModuleName: "VCF"
 ModuleType: "Filter"
-ModuleVersion: "1.0.0"
+ModuleVersion: "1.2.0"
 Author: "Signal"
 
 Input Pins:
@@ -14,7 +14,7 @@ Output Pins:
 
 Parameters:
 - id: cutoff_hz, label: "Cutoff", type: knob, min: 20.0, max: 20000.0, default: 1000.0
-- id: resonance, label: "Resonance", type: knob, min: 0.0, max: 1.0, default: 0.5
+- id: resonance, label: "Resonance", type: knob, min: 0.0, max: 1.0, default: 0.3
 - id: filter_type, label: "Filter Type", type: stepped, min: 0, max: 3, default: 0
 */
 
@@ -58,38 +58,69 @@ public:
 
         const float *in = bufferView.InputPins[0];
         const float *cutoffCv = (bufferView.InputPins.size() > 1) ? bufferView.InputPins[1] : nullptr;
+        const float *resonanceCv = (bufferView.InputPins.size() > 2) ? bufferView.InputPins[2] : nullptr;
         float *out = bufferView.OutputPins[0];
 
         const float sampleRate = (bufferView.SampleRate > 0) ? static_cast<float>(bufferView.SampleRate) : 44100.0f;
+        const float pi = 3.14159265359f;
 
         for (size_t i = 0; i < bufferView.NumberOfSamples; ++i)
         {
             float cutoff = CutoffHz;
             if (cutoffCv != nullptr)
             {
-                cutoff += cutoffCv[i] * 5000.0f;
+                cutoff *= std::pow(2.0f, (cutoffCv[i] - 0.5f) * 10.0f);
             }
+            
+            // Clamp cutoff frequency
             if (cutoff < 20.0f)
                 cutoff = 20.0f;
             if (cutoff > 20000.0f)
                 cutoff = 20000.0f;
 
-            float alpha = (6.28318530718f * cutoff) / (6.28318530718f * cutoff + sampleRate);
-            float lp = LastLP + alpha * (in[i] - LastLP);
-            float hp = in[i] - lp;
-            float bp = hp - LastHP;
-            LastHP = hp;
-            LastLP = lp;
+            float res = Resonance;
+            if (resonanceCv != nullptr)
+            {
+                res = Resonance + (resonanceCv[i] - 0.5f);
+                if (res < 0.0f) res = 0.0f;
+                if (res > 1.0f) res = 1.0f;
+            }
 
-            float sample = lp;
+            float omega = 2.0f * pi * cutoff / sampleRate;
+            float sin_omega = std::sin(omega);
+            float cos_omega = std::cos(omega);
+            
+            float alpha = sin_omega / (2.0f * (1.0f + res * 3.0f));
+            
+            float f = 2.0f * std::sin(pi * cutoff / sampleRate);
+            
+            float q = 1.0f + (res * 3.9f);
+            float damp = 2.0f - (2.0f / q);
+
+            float notch = in[i] - (BandState * damp);
+            float lowPass = LastLowPass + f * BandState;
+            float highPass = notch - lowPass;
+            float bandPass = f * highPass + BandState;
+            
+            // Update state
+            LastLowPass = lowPass;
+            BandState = bandPass;
+
+            float sample = lowPass;  // Default is lowpass
             if (FilterType == 1)
-                sample = hp;
+            {
+                sample = highPass;  // Highpass
+            }
             else if (FilterType == 2)
-                sample = bp;
+            {
+                sample = bandPass;  // Bandpass
+            }
             else if (FilterType == 3)
-                sample = in[i] - bp;
+            {
+                sample = notch;  // Notch (band-reject)
+            }
 
-            out[i] = sample * (1.0f - Resonance * 0.5f);
+            out[i] = sample;
         }
     }
 
@@ -165,8 +196,8 @@ private:
     float CutoffHz = 1000.0f;
     float Resonance = 0.5f;
     int FilterType = 0;
-    float LastLP = 0.0f;
-    float LastHP = 0.0f;
+    float LastLowPass = 0.0f;
+    float BandState = 0.0f;  // State variable for band-pass filter
 };
 
 MDU_REGISTER(VCFModule)

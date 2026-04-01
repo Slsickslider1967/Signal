@@ -1,7 +1,7 @@
 /*! Module
 ModuleName: "VCA"
 ModuleType: "Amplifier"
-ModuleVersion: "1.0.0"
+ModuleVersion: "1.1.0"
 Author: "Signal"
 
 Input Pins:
@@ -12,7 +12,7 @@ Output Pins:
 - id: audio_out, label: "Audio Out"
 
 Parameters:
-- id: base_gain, label: "Base Gain", type: knob, min: 0.0, max: 1.0, default: 0.8
+- id: base_gain, label: "Base Gain", type: knob, min: 0.0, max: 1.0, default: 0.5
 - id: cv_amount, label: "CV Amount", type: knob, min: 0.0, max: 1.0, default: 0.5
 - id: range_min, label: "Range Min", type: knob, min: 0.0, max: 1.0, default: 0.0
 - id: range_max, label: "Range Max", type: knob, min: 0.0, max: 1.0, default: 1.0
@@ -20,6 +20,7 @@ Parameters:
 
 #include "mdu_api.h"
 #include "imgui.h"
+#include <cmath>
 
 class VCAModule final : public MDU::Module
 {
@@ -61,17 +62,28 @@ public:
 
         for (size_t i = 0; i < bufferView.NumberOfSamples; ++i)
         {
-            float cvValue = 0.5f;
+            float cvValue = 0.5f; 
             if (cv != nullptr)
             {
                 cvValue = cv[i];
             }
+            
+            // Clamp
             if (cvValue < 0.0f)
                 cvValue = 0.0f;
             if (cvValue > 1.0f)
                 cvValue = 1.0f;
 
-            float gain = BaseGain + (cvValue - 0.5f) * CVAmount;
+            float cvOffset = (cvValue - 0.5f) * CVAmount;
+            float gain = BaseGain;
+            
+            if (cvOffset != 0.0f)
+            {
+                // Exponential mapping: pow(2, offset) gives octave-like scaling
+                gain = BaseGain * std::pow(2.0f, cvOffset * 2.0f);
+            }
+            
+            // Clamp
             if (gain < RangeMin)
                 gain = RangeMin;
             if (gain > RangeMax)
@@ -160,7 +172,7 @@ private:
         return value;
     }
 
-    float BaseGain = 0.8f;
+    float BaseGain = 0.5f;
     float CVAmount = 0.5f;
     float RangeMin = 0.0f;
     float RangeMax = 1.0f;

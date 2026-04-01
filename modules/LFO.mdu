@@ -1,7 +1,7 @@
 /*! Module
 ModuleName: "LFO"
 ModuleType: "LFO"
-ModuleVersion: "1.0.0"
+ModuleVersion: "1.1.0"
 Author: "Signal"
 
 Input Pins:
@@ -14,6 +14,7 @@ Output Pins:
 Parameters:
 - id: rate_hz, label: "Rate", type: knob, min: 0.1, max: 20.0, default: 1.0
 - id: amount, label: "Amount", type: knob, min: 0.0, max: 1.0, default: 0.5
+- id: phase_offset, label: "Phase", type: knob, min: 0.0, max: 1.0, default: 0.0
 - id: wave_type, label: "Wave Type", type: stepped, min: 0, max: 4, default: 0
 */
 
@@ -57,6 +58,7 @@ public:
 
         for (size_t i = 0; i < bufferView.NumberOfSamples; ++i)
         {
+            // Handle reset input - resets phase when gate goes high
             if (reset != nullptr && reset[i] > 0.5f)
             {
                 Phase = 0.0f;
@@ -65,10 +67,11 @@ public:
             float rate = RateHz;
             if (rateCv != nullptr)
             {
-                rate += rateCv[i] * 5.0f;
+                // CV modulates rate by up to ±1 octave
+                rate *= std::pow(2.0f, (rateCv[i] - 0.5f) * 2.0f);
             }
-            if (rate < 0.1f)
-                rate = 0.1f;
+            if (rate < 0.01f)
+                rate = 0.01f;
             if (rate > 20.0f)
                 rate = 20.0f;
 
@@ -78,23 +81,30 @@ public:
                 Phase -= 1.0f;
             }
 
+            // Apply phase offset
+            float phaseWithOffset = Phase + PhaseOffset;
+            while (phaseWithOffset >= 1.0f)
+            {
+                phaseWithOffset -= 1.0f;
+            }
+
             float sample = 0.0f;
             switch (WaveType)
             {
-            case 1:
-                sample = (Phase < 0.5f) ? 1.0f : -1.0f;
+            case 1:  // Square
+                sample = (phaseWithOffset < 0.5f) ? 1.0f : -1.0f;
                 break;
-            case 2:
-                sample = 2.0f * Phase - 1.0f;
+            case 2:  // Sawtooth
+                sample = 2.0f * phaseWithOffset - 1.0f;
                 break;
-            case 3:
-                sample = (Phase < 0.5f) ? (4.0f * Phase - 1.0f) : (3.0f - 4.0f * Phase);
+            case 3:  // Triangle
+                sample = (phaseWithOffset < 0.5f) ? (4.0f * phaseWithOffset - 1.0f) : (3.0f - 4.0f * phaseWithOffset);
                 break;
-            case 4:
-                sample = (Phase < 0.3f) ? 1.0f : -1.0f;
+            case 4:  // Pulse
+                sample = (phaseWithOffset < 0.3f) ? 1.0f : -1.0f;
                 break;
-            default:
-                sample = std::sin(6.28318530718f * Phase);
+            default:  // Sine
+                sample = std::sin(6.28318530718f * phaseWithOffset);
                 break;
             }
 
@@ -107,6 +117,7 @@ public:
         ImGui::PushID(this);
         ImGui::SliderFloat("Rate", &RateHz, 0.1f, 20.0f, "%.2f Hz");
         ImGui::SliderFloat("Amount", &Amount, 0.0f, 1.0f, "%.2f");
+        ImGui::SliderFloat("Phase", &PhaseOffset, 0.0f, 1.0f, "%.2f");
 
         const char *waveTypes[] = {"Sine", "Square", "Saw", "Tri", "Pulse"};
         int wave = WaveType;
@@ -137,6 +148,15 @@ public:
             Amount = outValue;
             return true;
         }
+        if (parameterID == "phase_offset")
+        {
+            if (outValue < 0.0f)
+                outValue = 0.0f;
+            if (outValue > 1.0f)
+                outValue = 1.0f;
+            PhaseOffset = outValue;
+            return true;
+        }
         if (parameterID == "wave_type")
         {
             int type = static_cast<int>(outValue);
@@ -162,6 +182,11 @@ public:
             outValue = Amount;
             return true;
         }
+        if (parameterID == "phase_offset")
+        {
+            outValue = PhaseOffset;
+            return true;
+        }
         if (parameterID == "wave_type")
         {
             outValue = static_cast<float>(WaveType);
@@ -173,6 +198,7 @@ public:
 private:
     float RateHz = 1.0f;
     float Amount = 0.5f;
+    float PhaseOffset = 0.0f;
     int WaveType = 0;
     float Phase = 0.0f;
 };
