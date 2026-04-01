@@ -19,6 +19,7 @@ Parameters:
 */
 
 #include "mdu_api.h"
+#include "imgui.h"
 
 class VCAModule final : public MDU::Module
 {
@@ -80,7 +81,20 @@ public:
         }
     }
 
-    void DrawEditor() override {}
+    void DrawEditor() override
+    {
+        ImGui::PushID(this);
+        ImGui::SliderFloat("Base Gain", &BaseGain, 0.0f, 1.0f, "%.2f");
+        ImGui::SliderFloat("CV Amount", &CVAmount, 0.0f, 1.0f, "%.2f");
+        ImGui::SliderFloat("Range Min", &RangeMin, 0.0f, 1.0f, "%.2f");
+        ImGui::SliderFloat("Range Max", &RangeMax, 0.0f, 1.0f, "%.2f");
+
+        if (RangeMin > RangeMax)
+        {
+            RangeMax = RangeMin;
+        }
+        ImGui::PopID();
+    }
 
     bool SetParameter(const string &parameterID, float outValue) override
     {

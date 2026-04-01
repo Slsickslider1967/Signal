@@ -56,6 +56,7 @@ public:
         }
 
         float *out = bufferView.OutputPins[0];
+        const float *voctIn = (bufferView.InputPins.size() > 0) ? bufferView.InputPins[0] : nullptr;
         const float *fmIn = (bufferView.InputPins.size() > 1) ? bufferView.InputPins[1] : nullptr;
         const float *pwmIn = (bufferView.InputPins.size() > 2) ? bufferView.InputPins[2] : nullptr;
 
@@ -64,6 +65,11 @@ public:
         for (size_t i = 0; i < bufferView.NumberOfSamples; ++i)
         {
             float freq = Frequency;
+            if (voctIn != nullptr)
+            {
+                freq *= std::pow(2.0f, voctIn[i]);
+            }
+
             if (fmIn != nullptr)
             {
                 freq += fmIn[i] * 1000.0f * FMDepth;

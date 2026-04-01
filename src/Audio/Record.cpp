@@ -5,6 +5,9 @@
 #include <chrono>
 #include <filesystem>
 #include <fstream>
+#include <cstdlib>
+#include <atomic>
+#include <mutex>
 
 #include <SDL2/SDL.h>
 
@@ -13,6 +16,8 @@
 
 namespace Record
 {    
+    static constexpr const char* DefaultRecordingSubdirectory = "Documents/Signal/Recordings";
+
     struct WavWriter 
     {
         std::ofstream file;
@@ -50,6 +55,7 @@ namespace Record
 
         bool isOpen() const { return file.is_open(); }
 
+        // Writes the WAV header with a placeholder for data chunk size, which will be updated in finalize()
         void writeHeader() {
             file.seekp(0, std::ios::beg);
             file.write("RIFF", 4);
@@ -103,46 +109,73 @@ namespace Record
 
     static WavWriter Global_WavWriter;
     static std::vector<float> CachedRecording;
-    static bool isRecording = false;
+    // Use of atomic bool as it is thread safe
+    static std::atomic<bool> isRecording(false);
+    static std::mutex GlobalRecordMutex;
     static std::string WavPath;
+
+    // File path receiver
+    static std::string GetDefaultRecordingDirectory()
+    {
+        const char* home = getenv("HOME");
+        if (home != nullptr && home[0] != '\0')
+        {
+            return std::string(home) + "/" + DefaultRecordingSubdirectory;
+        }
+        return DefaultRecordingSubdirectory;
+    }
+
+    static std::string BuildDefaultRecordingPath()
+    {
+        return GetDefaultRecordingDirectory() + "/recording_" + std::to_string(std::chrono::system_clock::now().time_since_epoch().count()) + ".wav";
+    }
 
     void OpenWavForRecording(const std::string &path)
     {
+        std::lock_guard<std::mutex> lock(GlobalRecordMutex);
         WavPath = path;
         if (WavPath.empty())
         {
-            WavPath = std::string(getenv("HOME") ? getenv("HOME") : "") + "/Documents/Signal/Recordings/recording_" + std::to_string(std::chrono::system_clock::now().time_since_epoch().count()) + ".wav";
+            WavPath = BuildDefaultRecordingPath();
         }
         CachedRecording.clear();
-        isRecording = false;
+        isRecording.store(false, std::memory_order_relaxed);
         Console::AppendConsoleLine("[info] Ready to record to: " + WavPath);
     }
 
     void SetWavPath(const std::string &path)
     {
+        std::lock_guard<std::mutex> lock(GlobalRecordMutex);
         WavPath = path;
         Console::AppendConsoleLine("[info] Save path set to: " + WavPath);
     }
 
+    // recording constrols called by Handler 
     void StartRecording()
     {
         if (WavPath.empty())
         {
             OpenWavForRecording("");
         }
-        CachedRecording.clear();
-        isRecording = true;
+
+        {
+            std::lock_guard<std::mutex> lock(GlobalRecordMutex);
+            CachedRecording.clear();
+            isRecording.store(true, std::memory_order_relaxed);
+        }
         Console::AppendConsoleLine("[info] Recording started.");
     }
 
     void StopRecording()
     {
-        isRecording = false;
+        isRecording.store(false, std::memory_order_relaxed);
         Console::AppendConsoleLine("[info] Recording stopped. Not yet saved.");
     }
 
     void SaveLastRecording()
     {
+        std::lock_guard<std::mutex> lock(GlobalRecordMutex);
+        isRecording.store(false, std::memory_order_relaxed);
         if (CachedRecording.empty() || WavPath.empty())
         {
             Console::AppendConsoleLine("[warning] No recording to save.");
@@ -187,10 +220,15 @@ namespace Record
         WavPath.clear();
     }
 
-    // Call this from your audio callback when isRecording is true
     void RecordSamples(const float* data, size_t count)
     {
-        if (isRecording)
+        if (!isRecording.load(std::memory_order_relaxed) || data == nullptr || count == 0)
+        {
+            return;
+        }
+
+        std::lock_guard<std::mutex> lock(GlobalRecordMutex);
+        if (isRecording.load(std::memory_order_relaxed))
         {
             CachedRecording.insert(CachedRecording.end(), data, data + count);
         }

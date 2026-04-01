@@ -9,6 +9,7 @@
 #include <algorithm>
 
 #include "Audio/Audio.h"
+#include "Audio/Record.h"
 #include "WaveForm.h"
 
 namespace Audio
@@ -90,6 +91,9 @@ namespace Audio
                 outputSamples[sampleIndex] *= scale;
         }
 
+        // Capture the exact post-processed playback stream for WAV recording.
+        Record::RecordSamples(outputSamples, static_cast<size_t>(sampleCount));
+
         // Debug: print sum of output buffer after all processing
         float sum = 0.0f;
         for (int i = 0; i < sampleCount; ++i) {
@@ -118,7 +122,7 @@ namespace Audio
         requestedSpec.userdata = nullptr;
 
         SDL_AudioSpec obtainedSpec;
-        GlobalDevice = SDL_OpenAudioDevice(nullptr, 1, &requestedSpec, &obtainedSpec, 0);
+        GlobalDevice = SDL_OpenAudioDevice(nullptr, 0, &requestedSpec, &obtainedSpec, 0);
         if (GlobalDevice == 0)
         {
             std::cerr << "Failed to open audio device: " << SDL_GetError() << std::endl;

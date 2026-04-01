@@ -19,6 +19,7 @@ Parameters:
 
 #include <cmath>
 #include "mdu_api.h"
+#include "imgui.h"
 
 class LFOModule final : public MDU::Module
 {
@@ -101,9 +102,19 @@ public:
         }
     }
 
-    void DrawEditor() override 
+    void DrawEditor() override
     {
-        
+        ImGui::PushID(this);
+        ImGui::SliderFloat("Rate", &RateHz, 0.1f, 20.0f, "%.2f Hz");
+        ImGui::SliderFloat("Amount", &Amount, 0.0f, 1.0f, "%.2f");
+
+        const char *waveTypes[] = {"Sine", "Square", "Saw", "Tri", "Pulse"};
+        int wave = WaveType;
+        if (ImGui::Combo("Wave", &wave, waveTypes, IM_ARRAYSIZE(waveTypes)))
+        {
+            WaveType = wave;
+        }
+        ImGui::PopID();
     }
 
     bool SetParameter(const std::string &parameterID, float outValue) override

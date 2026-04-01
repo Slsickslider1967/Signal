@@ -21,7 +21,6 @@ Parameters:
 #include <cmath>
 #include "mdu_api.h"
 #include "imgui.h"
-// #include "imgui-knobs.h"
 
 class VCFModule final : public MDU::Module
 {
@@ -94,7 +93,20 @@ public:
         }
     }
 
-    void DrawEditor() override {}
+    void DrawEditor() override
+    {
+        ImGui::PushID(this);
+        ImGui::SliderFloat("Cutoff", &CutoffHz, 20.0f, 20000.0f, "%.0f Hz", ImGuiSliderFlags_Logarithmic);
+        ImGui::SliderFloat("Resonance", &Resonance, 0.0f, 1.0f, "%.2f");
+
+        const char *filterTypes[] = {"LowPass", "HighPass", "BandPass", "Notch"};
+        int type = FilterType;
+        if (ImGui::Combo("Filter Type", &type, filterTypes, IM_ARRAYSIZE(filterTypes)))
+        {
+            FilterType = type;
+        }
+        ImGui::PopID();
+    }
 
     bool SetParameter(const string &parameterID, float outValue) override
     {

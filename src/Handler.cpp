@@ -812,111 +812,6 @@ void DrawModuleDetails()
     std::string windowTitle = "Module Panel: " + selectedModule->Name + " #" + std::to_string(selectedModule->ID);
     ImGui::Begin(windowTitle.c_str(), &windowOpen);
 
-    auto toLowerCopy = [](std::string text)
-    {
-        std::transform(text.begin(), text.end(), text.begin(), [](unsigned char c)
-                       { return static_cast<char>(std::tolower(c)); });
-        return text;
-    };
-
-    auto findParameter = [&](const std::string &parameterID) -> const MDU::ParameterDefinition *
-    {
-        for (const auto &parameter : selectedModule->Metadata.Parameters)
-        {
-            if (parameter.ID == parameterID)
-            {
-                return &parameter;
-            }
-        }
-        return nullptr;
-    };
-
-    auto getParameter = [&](const std::string &parameterID, float fallback) -> float
-    {
-        float value = fallback;
-        if (selectedModule->Instance != nullptr)
-        {
-            selectedModule->Instance->GetParameter(parameterID, value);
-        }
-        return value;
-    };
-
-    auto setParameterClamped = [&](const std::string &parameterID, float value)
-    {
-        const MDU::ParameterDefinition *parameter = findParameter(parameterID);
-        if (parameter != nullptr)
-        {
-            if (value < parameter->minValue)
-                value = parameter->minValue;
-            if (value > parameter->maxValue)
-                value = parameter->maxValue;
-        }
-        if (selectedModule->Instance != nullptr)
-        {
-            selectedModule->Instance->SetParameter(parameterID, value);
-        }
-    };
-
-    auto drawKnobByID = [&](const std::string &parameterID,
-                            const char *title,
-                            float fallback,
-                            float minValue,
-                            float maxValue,
-                            float speed,
-                            const char *format,
-                            ImGuiKnobVariant variant,
-                            ImGuiKnobFlags flags = ImGuiKnobFlags_NoTitle)
-    {
-        float value = getParameter(parameterID, fallback);
-        ImGui::Text("%s", title);
-        std::string knobID = "##" + parameterID + "_knob";
-        if (ImGuiKnobs::Knob(knobID.c_str(), &value, minValue, maxValue, speed, format, variant, 0.0f, flags))
-        {
-            setParameterClamped(parameterID, value);
-        }
-    };
-
-    auto drawSteppedButtons = [&](const std::string &parameterID, const char *sectionTitle)
-    {
-        const MDU::ParameterDefinition *parameter = findParameter(parameterID);
-        if (parameter == nullptr || parameter->options.empty())
-        {
-            return;
-        }
-
-        int optionIndex = static_cast<int>(getParameter(parameterID, parameter->defaultValue));
-        if (optionIndex < 0)
-            optionIndex = 0;
-        if (optionIndex >= static_cast<int>(parameter->options.size()))
-            optionIndex = static_cast<int>(parameter->options.size()) - 1;
-
-        ImGui::Text("%s", sectionTitle);
-        for (int i = 0; i < static_cast<int>(parameter->options.size()); ++i)
-        {
-            bool selected = (i == optionIndex);
-            if (selected)
-            {
-                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.2f, 0.7f, 0.2f, 1.0f));
-            }
-
-            if (ImGui::Button(parameter->options[i].c_str(), ImVec2(86.0f, 0.0f)))
-            {
-                optionIndex = i;
-                setParameterClamped(parameterID, static_cast<float>(optionIndex));
-            }
-
-            if (selected)
-            {
-                ImGui::PopStyleColor();
-            }
-
-            if (i + 1 < static_cast<int>(parameter->options.size()))
-            {
-                ImGui::SameLine();
-            }
-        }
-    };
-
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.11f, 0.12f, 0.13f, 1.0f));
     ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 6.0f);
     ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 5.0f);
@@ -937,9 +832,6 @@ void DrawModuleDetails()
         ImGui::Text("Input Jacks: %d", selectedModule->InPins);
         ImGui::SameLine();
         ImGui::Text("Output Jacks: %d", selectedModule->OutPins);
-
-        const std::string moduleTypeLower = toLowerCopy(selectedModule->Metadata.ModuleType);
-        const std::string moduleNameLower = toLowerCopy(selectedModule->Metadata.ModuleName);
 
         if (selectedModule->Instance != nullptr)
         {
