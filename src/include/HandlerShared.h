@@ -42,6 +42,7 @@ void DeleteRack(int rackID);
 bool AddDynamicModuleToRack(Rack &rack, const std::string &sourcePath, std::string *errorOut);
 void RemoveNode(int nodeID);
 void LaunchDefaultFileManager(const std::filesystem::path &path = {});
+void AddMduSearchPathAndPersist(const std::string &path);
 
 void SetupAudioHandling();
 void ShutdownAudioHandling();

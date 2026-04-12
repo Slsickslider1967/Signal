@@ -9,6 +9,13 @@
 
 namespace MDU
 {
+	std::string TrimString(const std::string& value);
+	std::filesystem::path GetMduSearchPathSettingsFile();
+	std::vector<std::string> NormalizeAndUniquePaths(const std::vector<std::string>& paths);
+	std::vector<std::string> LoadMduSearchPathsFromSettingsFile();
+	bool SaveMduSearchPathsToSettingsFile(const std::vector<std::string>& paths);
+	void RemoveMduSearchPathFromSettingsFile(const std::string& pathToRemove);
+
 	struct LoadedModule
 	{
 		std::string SourcePath;
@@ -53,5 +60,6 @@ namespace MDU
 		bool EnsureCacheDirectory(std::string* errorOut) const;
 		std::string BuildSharedObjectPath(const std::string& mduPath) const;
 		bool CompileMduToSharedObject(const std::string& mduPath, const std::string& soPath, std::string* errorOut) const;
+		
 	};
 }

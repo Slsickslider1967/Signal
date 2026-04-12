@@ -660,12 +660,24 @@ std::vector<std::string> BuildMduPathsFromEnvironment()
 
 std::vector<std::string> BuildMduRuntimePaths()
 {
-    const auto environmentPaths = BuildMduPathsFromEnvironment();
-    if (!environmentPaths.empty())
+    auto AppendUniquePaths = [](std::vector<std::string> &destination, const std::vector<std::string> &source)
     {
-        return environmentPaths;
-    }
+        for (const auto &path : source)
+        {
+            if (path.empty())
+            {
+                continue;
+            }
 
+            if (std::find(destination.begin(), destination.end(), path) == destination.end())
+            {
+                destination.push_back(path);
+            }
+        }
+    };
+
+    const auto settingsPaths = MDU::LoadMduSearchPathsFromSettingsFile();
+    const auto environmentPaths = BuildMduPathsFromEnvironment();
     auto FirstExisting = [](const std::vector<std::filesystem::path> &candidates) -> std::vector<std::string>
     {
         for (const auto &candidate : candidates)
@@ -725,13 +737,59 @@ std::vector<std::string> BuildMduRuntimePaths()
     sourceCandidates.push_back("../src/Modules");
     sourceCandidates.push_back("../modules");
 
-    const auto bundledPaths = FirstExisting(bundledCandidates);
-    if (!bundledPaths.empty())
+    std::vector<std::string> defaultPaths = FirstExisting(bundledCandidates);
+    if (defaultPaths.empty())
     {
-        return bundledPaths;
+        defaultPaths = FirstExisting(sourceCandidates);
     }
 
-    return FirstExisting(sourceCandidates);
+    std::vector<std::string> runtimePaths;
+
+    if (!settingsPaths.empty())
+    {
+        runtimePaths = settingsPaths;
+    }
+    else if (!environmentPaths.empty())
+    {
+        runtimePaths = environmentPaths;
+        MDU::SaveMduSearchPathsToSettingsFile(environmentPaths);
+    }
+
+    AppendUniquePaths(runtimePaths, defaultPaths);
+
+    if (runtimePaths.empty())
+    {
+        runtimePaths = defaultPaths;
+    }
+
+    if (settingsPaths.empty() && environmentPaths.empty() && !runtimePaths.empty())
+    {
+        MDU::SaveMduSearchPathsToSettingsFile(runtimePaths);
+    }
+
+    return runtimePaths;
+}
+
+void AddMduSearchPathAndPersist(const std::string &path)
+{
+    const std::vector<std::string> normalizedNewPath = MDU::NormalizeAndUniquePaths({path});
+    if (normalizedNewPath.empty())
+    {
+        Console::AppendConsoleLine("[warning] Cannot add empty path to MDU search paths.");
+        return;
+    }
+
+    const std::string &newPath = normalizedNewPath.front();
+    std::vector<std::string> currentPaths = GModuleLoader.GetSearchPaths();
+
+    if (std::find(currentPaths.begin(), currentPaths.end(), newPath) == currentPaths.end())
+    {
+        GModuleLoader.AddSearchPath(newPath);
+        GFileWatcher.AddWatchPath(newPath);
+        currentPaths.push_back(newPath);
+    }
+
+    MDU::SaveMduSearchPathsToSettingsFile(currentPaths);
 }
 
 void RemoveLinksForModule(Rack &rack, int moduleID)
