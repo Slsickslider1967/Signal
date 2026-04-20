@@ -501,6 +501,12 @@ namespace MDU
 		return outPath.lexically_normal().string();
 	}
 
+	// <Summary>
+	// This is the most platform-specific part of the loader, 
+	// and also the most likely to fail due to environment issues, 
+	// so it has very detailed error reporting
+	// </Summary>
+
 	bool ModuleLoader::CompileMduToSharedObject(const std::string &mduPath, const std::string &sharedObjectPath, std::string *errorOut) const
 	{
 		std::ostringstream cmd;
@@ -589,6 +595,7 @@ namespace MDU
 			output = "";
 			ReturnCode = std::system(command.c_str());
 	#endif
+			// Error Handling 
 			if (ReturnCode != 0) {
 				if (errorOut) {
 					*errorOut = "[MLD002] Failed compiling module: " + mduPath + " (exit code " + std::to_string(ReturnCode) + ")\nCommand: " + command + "\nOutput:\n" + output;
