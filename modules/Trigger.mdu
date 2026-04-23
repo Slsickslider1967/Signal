@@ -1,0 +1,157 @@
+
+        /*! Module
+        ModuleName: "Trigger"
+        ModuleType: "Trigger"
+        ModuleVersion: "1.0.0"
+        Author: "Signal"
+
+        Input Pins:
+
+        Output Pins:
+        - id: cv_out, label: "Audio Out"
+
+        Parameters:
+        */
+
+        #include "mdu_api.h"
+        #include "imgui.h"
+        #include <atomic>
+
+        class TriggerModule : public MDU::Module
+        {
+            private:
+                float TriggerID = 1.0f;
+                float PulseMs = 10.0f;
+                std::atomic<bool> PendingTrigger{false};
+                std::atomic<bool> GateHeld{false};
+                std::atomic<int> PulseSamplesRemaining{0};
+
+            public:
+                static MDU::MetaData BuildMetadata()
+                {
+                    MDU::MetaData metadata;
+                    metadata.ModuleName = "Trigger";
+                    metadata.ModuleType = "Trigger";
+                    metadata.ModuleVersion = "1.0.0";
+                    metadata.Author = "Signal";
+
+                    metadata.OutputPins.push_back({"cv_out", "Audio Out"});
+
+                    return metadata;
+                }
+
+                void Process(const MDU::BufferView &bufferView, float /*value*/) override
+                {
+                    if (bufferView.OutputPins.empty() || bufferView.OutputPins[0] == nullptr)
+                    {
+                        return;
+                    }
+
+                    const float *input = nullptr;
+                    float *output = bufferView.OutputPins[0];
+                    float sampleRate = static_cast<float>(bufferView.SampleRate);
+                    
+                    if (!bufferView.InputPins.empty() && bufferView.InputPins[0] != nullptr)
+                    {
+                        input = bufferView.InputPins[0];
+                    }
+
+                    if (sampleRate <= 0.0f)
+                    {
+                        sampleRate = 44100.0f;
+                    }
+
+                    if (PendingTrigger.exchange(false))
+                    {
+                        int pulseSamples = static_cast<int>((PulseMs / 1000.0f) * sampleRate);
+                        if (pulseSamples < 1)
+                        {
+                            pulseSamples = 1;
+                        }
+                        PulseSamplesRemaining.store(pulseSamples);
+                    }
+
+                    for (size_t i = 0; i < bufferView.NumberOfSamples; ++i)
+                    {
+                        bool pulseHigh = false;
+                        if (PulseSamplesRemaining.load() > 0)
+                        {
+                            pulseHigh = true;
+                        }
+
+                        bool gateHigh = false;
+                        if (GateHeld.load())
+                        {
+                            gateHigh = true;
+                        }
+
+                        float in = 0.0f;
+                        if (input != nullptr)
+                        {
+                            in = input[i];
+                        }
+
+                        float triggerOut = 0.0f;
+                        if (pulseHigh || gateHigh)
+                        {
+                            triggerOut = 1.0f;
+                        }
+
+                        if (in > triggerOut)
+                        {
+                            output[i] = in;
+                        }
+                        else
+                        {
+                            output[i] = triggerOut;
+                        }
+
+                        if (pulseHigh)
+                        {
+                            PulseSamplesRemaining.fetch_sub(1);
+                        }
+                    }
+                }
+
+                void DrawEditor() override 
+                {
+                    ImGui::Spacing();
+                    ImGui::Text("Press to emit trigger pulse, hold for gate high.");
+                    if (ImGui::Button("Trigger", ImVec2(-1.0f, 0.0f)))
+                    {
+                        PendingTrigger.store(true);
+                    }
+                    GateHeld.store(ImGui::IsItemActive());
+                    ImGui::SliderFloat("Pulse Width (ms)", &PulseMs, 1.0f, 200.0f, "%.1f");
+                }
+
+                bool SetParameter(const string &parameterID, float outValue) override
+                {
+                    if (parameterID != "TriggerID")
+                    {
+                        return false;
+                    }
+
+                    if (outValue < 0.1f)
+                        outValue = 0.1f;
+                    if (outValue > 20.0f)
+                        outValue = 20.0f;
+                    TriggerID = outValue;
+                    return true;
+                }
+
+                bool GetParameter(const string &parameterID, float &outValue) override
+                {
+                    if (parameterID != "TriggerID")
+                    {
+                        return false;
+                    }
+
+                    outValue = TriggerID;
+                    return true;
+                }
+        };
+
+
+        MDU_REGISTER(TriggerModule)
+        

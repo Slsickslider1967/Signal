@@ -33,68 +33,67 @@ namespace MDU
 
         class TemplateModule : public MDU::Module
         {
-        public:
-            static MDU::MetaData BuildMetadata()
-            {
-                MDU::MetaData metadata;
-                metadata.ModuleName = "Template";
-                metadata.ModuleType = "Template";
-                metadata.ModuleVersion = "1.0.0";
-                metadata.Author = "YOU";
-
-                metadata.InputPins.push_back({"rate_cv", "Audio In"});
-                metadata.OutputPins.push_back({"cv_out", "Audio Out"});
-                metadata.Parameters.push_back({"TemplateID", "Template", MDU::ParameterType::Knob, 0.1f, 20.0f, 1.0f, {}});
-
-                return metadata;
-            }
-
-            void Process(const MDU::BufferView &bufferView, float /*value*/) override
-            {
-                if (bufferView.OutputPins.empty() || bufferView.OutputPins[0] == nullptr)
+            private:
+                float TemplateID = 1.0f;
+                
+            public:
+                static MDU::MetaData BuildMetadata()
                 {
-                    return;
+                    MDU::MetaData metadata;
+                    metadata.ModuleName = "Template";
+                    metadata.ModuleType = "Template";
+                    metadata.ModuleVersion = "1.0.0";
+                    metadata.Author = "YOU";
+
+                    metadata.InputPins.push_back({"rate_cv", "Audio In"});
+                    metadata.OutputPins.push_back({"cv_out", "Audio Out"});
+                    metadata.Parameters.push_back({"TemplateID", "Template", MDU::ParameterType::Knob, 0.1f, 20.0f, 1.0f, {}});
+
+                    return metadata;
                 }
 
-                const float *input = (bufferView.InputPins.empty() ? nullptr : bufferView.InputPins[0]);
-                float *output = bufferView.OutputPins[0];
-                for (size_t i = 0; i < bufferView.NumberOfSamples; ++i)
+                void Process(const MDU::BufferView &bufferView, float /*value*/) override
                 {
-                    output[i] = (input != nullptr) ? input[i] : 0.0f;
-                }
-            }
+                    if (bufferView.OutputPins.empty() || bufferView.OutputPins[0] == nullptr)
+                    {
+                        return;
+                    }
 
-            void DrawEditor() override {}
-
-            bool SetParameter(const string &parameterID, float outValue) override
-            {
-                if (parameterID != "TemplateID")
-                {
-                    return false;
+                    const float *input = (bufferView.InputPins.empty() ? nullptr : bufferView.InputPins[0]);
+                    float *output = bufferView.OutputPins[0];
+                    for (size_t i = 0; i < bufferView.NumberOfSamples; ++i)
+                    {
+                        output[i] = (input != nullptr) ? input[i] : 0.0f;
+                    }
                 }
 
-                if (outValue < 0.1f)
-                    outValue = 0.1f;
-                if (outValue > 20.0f)
-                    outValue = 20.0f;
-                TemplateID = outValue;
-                return true;
-            }
+                void DrawEditor() override {}
 
-            bool GetParameter(const string &parameterID, float &outValue) override
-            {
-                if (parameterID != "TemplateID")
+                bool SetParameter(const string &parameterID, float outValue) override
                 {
-                    return false;
+                    if (parameterID != "TemplateID")
+                    {
+                        return false;
+                    }
+
+                    if (outValue < 0.1f)
+                        outValue = 0.1f;
+                    if (outValue > 20.0f)
+                        outValue = 20.0f;
+                    TemplateID = outValue;
+                    return true;
                 }
 
-                outValue = TemplateID;
-                return true;
-            }
+                bool GetParameter(const string &parameterID, float &outValue) override
+                {
+                    if (parameterID != "TemplateID")
+                    {
+                        return false;
+                    }
 
-        private:
-            float TemplateID = 1.0f;
-
+                    outValue = TemplateID;
+                    return true;
+                }
         };
 
 
