@@ -27,14 +27,14 @@ extern int SelectedRackID;
 
 extern std::list<Rack> Racks;
 
-extern MDU::ModuleLoader GModuleLoader;
-extern std::mutex GRackMutex;
+extern MDU::ModuleLoader GlobalModuleLoader;
+extern std::mutex GlobalRackMutex;
 
-extern std::string GLastMduError;
-extern std::map<int, std::vector<float>> GModuleScopeInputs;
-extern std::map<int, std::vector<float>> GModuleScopeOutputs;
+extern std::string GlobalLastMduError;
+extern std::map<int, std::vector<float>> GlobaloduleScopeInputs;
+extern std::map<int, std::vector<float>> GlobalModuleScopeOutputs;
 
-extern bool GShowDebugConsole;
+extern bool GlobalShowDebugConsole;
 extern bool IsRecording;
 
 Rack *CreateRack(const std::string &name);

@@ -10,8 +10,7 @@
 
 namespace
 {
-
-    // For whitespace to the left and right for a clean string
+    // Trim leading/trailing whitespace from a string.
     std::string Trim(const std::string &Str)
     {
         std::size_t start = 0;
@@ -29,12 +28,13 @@ namespace
         return Str.substr(start, end - start);
     }
 
+    // Return true when Text begins with Prefix.
     bool StartsWith(const std::string &Text, const std::string &Prefix)
     {
         return Text.size() >= Prefix.size() && Text.compare(0, Prefix.size(), Prefix) == 0;
     }
 
-    // To remove quotes and other unnecessary characters from a string value, obvs
+    // Strip wrapping single/double quotes from a value when present.
     std::string StripQuotes(const std::string &Str)
     {
         std::string Output = Trim(Str);
@@ -50,7 +50,7 @@ namespace
         return Output;
     }
 
-    //Splits comma separated values while respecting quoted sections
+    // Split comma-separated text while respecting quoted segments.
     std::vector<std::string> SplitCommaRespectQuotes(const std::string& Line)
     {
         std::vector<std::string> parts;
@@ -91,7 +91,7 @@ namespace
         return parts;
     }
 
-    // Gives Key-Value pairs for inline objects like "id: value, label: value"
+    // Parse inline key:value objects used in pin/parameter lines.
     std::unordered_map<std::string, std::string> ParseInlineObject(const std::string& Line)
     {
         std::unordered_map<std::string, std::string> Output;
@@ -113,6 +113,7 @@ namespace
         return Output;
     }
 
+    // Parse a float and ensure the entire string was consumed.
     bool ToFloat(const std::string& Str, float& Out)
     {
         try
@@ -130,7 +131,7 @@ namespace
 
 namespace MDU
 {
-    // Case sensitive mapping to ParameterType
+    // Map a type string to ParameterType, case-insensitively.
     ParameterType ParameterTypeFromString(const std::string& text)
     {
         std::string Str = text;
@@ -145,7 +146,7 @@ namespace MDU
         return ParameterType::Knob;
     }
 
-    // Reverse mapping
+    // Convert ParameterType enum back to a display string.
     const char* ParameterTypeToString(ParameterType type)
     {
         switch (type)
@@ -159,7 +160,7 @@ namespace MDU
         }
     }
 
-    // Read the MDU file and extract the header content, then pass it to the text parser
+    // Read an .mdu file from disk and parse its metadata header.
     ParseResult ParseMDUFile(const std::string& filePath)
     {
         std::ifstream file(filePath);
@@ -173,7 +174,7 @@ namespace MDU
         return ParseMDUText(buffer.str());
     }
 
-    // Main parsing function that takes the content of the MDU file as a string and extracts the metadata
+    // Parse MDU header text and return structured metadata plus validation errors.
     ParseResult ParseMDUText(const std::string& SourceText)
     {
         const std::string BeginTag = "/*! Module";
@@ -262,7 +263,7 @@ namespace MDU
                     Pin.ID = PinID -> second;
                     Pin.label = (PinLabel != pinFields.end()) ? PinLabel->second : Pin.ID;
 
-                    // Add the pin to the appropriate section.
+                        // Route parsed pins into input or output collections.
                     if (CurrentSection == Section::InputPins)
                         metadata.InputPins.push_back(Pin);
                     else 
@@ -317,7 +318,7 @@ namespace MDU
                     return {false, {}, "[MDP007] Invalid default value for parameter '" + Parameter.ID + "' at line " + std::to_string(LineNumber)};
                 }
 
-                // Handle options for combo and stepped types
+                // Parse option lists for combo/stepped style parameters.
                 auto OptionsIt = ParsedInLineObject.find("options");
                 if (OptionsIt != ParsedInLineObject.end())
                 {
@@ -350,7 +351,7 @@ namespace MDU
             }
             else
             {
-                // Top level key-value pairs
+                // Parse top-level metadata fields like ModuleName/Author.
                 auto Position = Text.find(':');
                 if (Position != std::string::npos)
                 {

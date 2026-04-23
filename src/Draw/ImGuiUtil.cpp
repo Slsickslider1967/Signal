@@ -11,6 +11,7 @@
 
 namespace ImGuiUtil
 {
+    // Draw a single signal line plot with locked axes and minimal plot chrome.
     static void RenderSignalPlot(const float *samples, int sampleCount, const char *label, float minY, float maxY)
     {
         if (!samples || sampleCount <= 0)
@@ -36,6 +37,7 @@ namespace ImGuiUtil
         }
     }
 
+    // Draw two overlaid signals for quick visual comparison.
     static void RenderDualSignalPlot(const float *redSamples, const float *blueSamples, int sampleCount, const char *label, float minY, float maxY)
     {
         if (!redSamples || !blueSamples || sampleCount <= 0)
@@ -70,12 +72,13 @@ namespace ImGuiUtil
         }
     }
 
+    // Render the current ImGui frame, including multi-viewport windows when enabled.
     void Render()
     {
         ImGui::Render();
         ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
 
-        // Update and render additional platform windows when using multi-viewports
+        // When viewports are on, render platform windows and restore the previous GL context.
         ImGuiIO& imguiIo = ImGui::GetIO();
         if (imguiIo.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
         {
@@ -86,6 +89,7 @@ namespace ImGuiUtil
         }
     }
 
+    // Begin a new ImGui frame for this tick.
     void Begin()
     {
         ImGui_ImplOpenGL3_NewFrame();
@@ -94,6 +98,7 @@ namespace ImGuiUtil
         // Fixed-window mode: do not create a fullscreen dockspace host.
     }
 
+    // End the current ImGui frame.
     void End()
     {
         ImGui::EndFrame();

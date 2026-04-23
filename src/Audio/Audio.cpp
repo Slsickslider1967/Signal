@@ -23,6 +23,7 @@ namespace Audio
     static FilterCallback GlobalFilterCallback = nullptr;
     static void* GlobalFilterUserData = nullptr;
 
+    // SDL audio callback: mix active waves, run post-filter, and optionally record output.
     static void SDLCALL AudioCallback(void* userdata, Uint8* stream, int len)
     {
             static int callCount = 0;
@@ -50,7 +51,7 @@ namespace Audio
                 waveSampleBuffer.resize(sampleCount);
             }
 
-            // mix active waves (modify per-wave Phase stored inside the active vector)
+            // Mix each enabled oscillator into the shared output stream for this callback block.
             for (size_t waveIndex = 0; waveIndex < activeWavesSnapshot->size(); ++waveIndex)
             {
                 WaveForm& wave = (*activeWavesSnapshot)[waveIndex];
@@ -76,7 +77,7 @@ namespace Audio
             GlobalFilterCallback(outputSamples, sampleCount, GlobalFilterUserData);
         }
 
-        // soft clipping if necessary
+        // Normalize the block if peak goes too high to avoid hard clipping artifacts.
         float peak = 0.0f;
         for (int sampleIndex = 0; sampleIndex < sampleCount; ++sampleIndex)
         {
@@ -104,6 +105,7 @@ namespace Audio
         }
     }
 
+    // Initialize SDL audio and open the playback device with float samples.
     void Init()
     {
         if (isInitilized) return;
@@ -140,6 +142,7 @@ namespace Audio
         isInitilized = true;
     }
 
+    // Close the playback device and clear all active waveform state.
     void Close()
     {
         if (!isInitilized) return;
@@ -160,6 +163,7 @@ namespace Audio
         isInitilized = false;
     }
 
+    // Add one waveform voice to the active playback list.
     void Play(const WaveForm& wave)
     {
         if (!isInitilized) Init();
@@ -179,6 +183,7 @@ namespace Audio
         std::atomic_store(&GlobalActiveWaves, updatedWaves);
     }
 
+    // Replace active voices while preserving phase continuity by matching WaveID.
     void SetWaveForms(const std::vector<WaveForm>& waves)
     {
         if (!isInitilized) Init();
@@ -206,6 +211,7 @@ namespace Audio
         std::atomic_store(&GlobalActiveWaves, updatedWaves);
     }
 
+    // Fill a caller-provided buffer with silence when audio is initialized.
     void WriteAudio(float* buffer, int numSamples)
     {
         if (!isInitilized) return;
@@ -213,6 +219,7 @@ namespace Audio
         std::fill(buffer, buffer + numSamples, 0.0f);
     }
     
+    // Register a post-mix processing callback invoked inside the audio thread.
     void SetFilterCallback(FilterCallback callback, void* userData)
     {
         GlobalFilterCallback = callback;

@@ -75,12 +75,9 @@ xdg-open build/docs/html/index.html
 
 Or serve the files locally and browse at http://localhost:8000:
 
-```bash
-cd build/docs/html
-python3 -m http.server 8000
-```
-
 Notes:
 - Doxygen must be installed on your system for the `doc_doxygen` target to be available.
 - Project Doxygen settings live in `Doxyfile.in` at the project root; edit that file to change inputs, output location, or extraction options.
 - The repository `.gitignore` has been updated to ignore generated Doxygen output (e.g. `build/docs/`).
+- In the generated docs, open `Whole-Project Top-Down Diagram` (`@ref architecture_graph`) for the architecture view.
+- In the generated docs, open `Whole-Project Class Chart` (`@ref uml_overview`) for the class relationships view.

@@ -14,6 +14,7 @@
 #include <thread>
 #include <vector>
 
+// Platform-specific includes for module loading and process handling
 #if defined(__linux__) || defined(__unix__) || defined(__APPLE__)
 #include <unistd.h>
 #endif
@@ -37,6 +38,9 @@
 #include "Functions/ConsoleHandling.h"
 #include "HandlerShared.h"
 
+
+// -- Global State --
+
 int NextRackID = 1;
 int NextModuleID = 1;
 int NextLinkID = 1;
@@ -45,20 +49,24 @@ int SelectedRackID = -1;
 
 std::list<Rack> Racks;
 
-MDU::ModuleLoader GModuleLoader;
-static MDU::FileWatcher GFileWatcher;
+MDU::ModuleLoader GlobalModuleLoader;
+static MDU::FileWatcher GlobalFileWatcher;
 
-std::mutex GRackMutex;
+std::mutex GlobalRackMutex;
 
-std::string GLastMduError;
+std::string GlobalLastMduError;
 
-std::map<int, std::vector<float>> GModuleScopeInputs;
-std::map<int, std::vector<float>> GModuleScopeOutputs;
+std::map<int, std::vector<float>> GlobaloduleScopeInputs;
+std::map<int, std::vector<float>> GlobalModuleScopeOutputs;
 
-static bool GFileWatcherInitialized = false;
-bool GShowDebugConsole = false;
+static bool GlobalFileWatcherInitialized = false;
+bool GlobalShowDebugConsole = false;
 bool IsRecording = false;
-// boolording = false;
+
+// K meaning constant
+static constexpr int kScopeSampleCount = 512;
+
+// -- Function prototypes --
 
 void SetupAudioHandling();
 void ShutdownAudioHandling();
@@ -79,25 +87,30 @@ void RemoveLinksForModule(Rack &rack, int moduleID);
 void RemoveDynamicModulesFromAllRacksBySourcePath(const std::string &sourcePath);
 void ProcessMduFileChanges();
 
-static constexpr int kScopeSampleCount = 512;
 
+// Capture a fixed-size snapshot of samples for module scope visualization.
+// Missing samples are padded with zeros to keep the buffer shape stable.
 void CaptureScopeSamples(std::map<int, std::vector<float>> &scopeMap,
                          int moduleID,
                          const float *source,
                          int numSamples)
 {
     std::vector<float> &scope = scopeMap[moduleID];
+
+    // Ensure the scope vector has exactly kScopeSampleCount samples
     if (scope.size() != static_cast<size_t>(kScopeSampleCount))
     {
         scope.assign(kScopeSampleCount, 0.0f);
     }
 
+    // If source is null or numSamples is non-positive fill the scope with zeros and return
     if (source == nullptr || numSamples <= 0)
     {
         std::fill(scope.begin(), scope.end(), 0.0f);
         return;
     }
 
+    // else copy samples from source to scope, up to kScopeSampleCount and fill the rest with zeros if needed
     int copyCount = std::min(kScopeSampleCount, numSamples);
     std::copy(source, source + copyCount, scope.begin());
     if (copyCount < kScopeSampleCount)
@@ -106,7 +119,8 @@ void CaptureScopeSamples(std::map<int, std::vector<float>> &scopeMap,
     }
 }
 
-
+// Build a dependency-aware execution order for active modules in one rack.
+// Upstream modules run first when links define a clear dependency chain.
 std::vector<DynamicModule *> BuildProcessingOrder(Rack &rack)
 {
     std::vector<DynamicModule *> ordered;
@@ -165,6 +179,7 @@ std::vector<DynamicModule *> BuildProcessingOrder(Rack &rack)
 
         if (!progressed)
         {
+            // If dependency resolution stalls, process the remaining modules anyway.
             for (auto &[moduleID, modulePtr] : moduleByID)
             {
                 if (processed.find(moduleID) == processed.end())
@@ -179,6 +194,8 @@ std::vector<DynamicModule *> BuildProcessingOrder(Rack &rack)
     return ordered;
 }
 
+// Return the connected output buffer for a specific destination pin.
+// Returns nullptr when no valid link or source buffer exists.
 const float *FindLinkedOutputBuffer(const Rack &rack,
                                     int endModuleID,
                                     int endPinIndex,
@@ -208,16 +225,18 @@ const float *FindLinkedOutputBuffer(const Rack &rack,
     return nullptr;
 }
 
+// Start the app loop and keep UI, rendering, and module hot-reload ticking.
+// Exits when the window requests shutdown.
 int main()
 {
-    GModuleLoader.SetTemplatePath(GetDefaultTemplatePath().string());
+    GlobalModuleLoader.SetTemplatePath(GetDefaultTemplatePath().string());
     Draw::MainWindow();
 
     while (!Window::ShouldClose())
     {
         ImGuiUtil::Begin();
 
-        std::lock_guard<std::mutex> rackLock(GRackMutex);
+        std::lock_guard<std::mutex> rackLock(GlobalRackMutex);
 
         Draw::DrawTopBar();
 
@@ -299,12 +318,14 @@ int main()
 
 // --Audio Handling--
 
+// Initialize the audio backend and register the main processing callback.
 void SetupAudioHandling()
 {
     Audio::Init();
     Audio::SetFilterCallback(AudioFilterCallback, nullptr);
 }
 
+// Keep legacy oscillator playback disabled while module processing drives audio.
 void UpdateAudioWaveFormsFromRacks()
 {
     // Keep legacy oscillator list empty so only the MDU callback writes audio.
@@ -317,11 +338,13 @@ void UpdateAudioWaveFormsFromRacks()
     }
 }
 
+// Run one audio block: process modules in order and mix output modules into the final buffer.
+// Also updates scope input/output snapshots used by the UI.
 void AudioFilterCallback(float *buffer, int numSamples, void *userData)
 {
     (void)userData;
 
-    std::lock_guard<std::mutex> rackLock(GRackMutex);
+    std::lock_guard<std::mutex> rackLock(GlobalRackMutex);
 
     if (buffer == nullptr || numSamples <= 0)
     {
@@ -340,6 +363,7 @@ void AudioFilterCallback(float *buffer, int numSamples, void *userData)
             continue;
         }
 
+        // Keyed by {moduleID, outputPinIndex} so links can fetch upstream audio quickly.
         std::map<std::pair<int, int>, std::vector<float>> outputBuffers;
         std::vector<DynamicModule *> processingOrder = BuildProcessingOrder(rack);
 
@@ -365,7 +389,7 @@ void AudioFilterCallback(float *buffer, int numSamples, void *userData)
             }
 
             const float *firstInput = inputPins.empty() ? nullptr : inputPins[0];
-            CaptureScopeSamples(GModuleScopeInputs, module->ID, firstInput, numSamples);
+            CaptureScopeSamples(GlobaloduleScopeInputs, module->ID, firstInput, numSamples);
 
             MDU::BufferView bufferView;
             bufferView.InputPins.assign(inputPins.begin(), inputPins.end());
@@ -379,7 +403,7 @@ void AudioFilterCallback(float *buffer, int numSamples, void *userData)
             }
 
             const float *firstOutput = outputPins.empty() ? nullptr : outputPins[0];
-            CaptureScopeSamples(GModuleScopeOutputs, module->ID, firstOutput, numSamples);
+            CaptureScopeSamples(GlobalModuleScopeOutputs, module->ID, firstOutput, numSamples);
         }
 
         for (const auto &module : rack.DynamicModules)
@@ -408,6 +432,7 @@ void AudioFilterCallback(float *buffer, int numSamples, void *userData)
             {
                 sum += outBuffer[i];
                 float mixed = buffer[i] + outBuffer[i];
+                // Clamp to avoid hard clipping beyond normalized output range.
                 if (mixed > 1.0f)
                     mixed = 1.0f;
                 if (mixed < -1.0f)
@@ -423,6 +448,7 @@ void AudioFilterCallback(float *buffer, int numSamples, void *userData)
     }
 }
 
+// Shut down audio resources cleanly.
 void ShutdownAudioHandling()
 {
     Audio::Close();
@@ -430,6 +456,7 @@ void ShutdownAudioHandling()
 
 // --Tools--
 
+// Create a new rack, assign an ID, and return it.
 Rack *CreateRack(const std::string &name)
 {
     Rack newRack;
@@ -441,6 +468,7 @@ Rack *CreateRack(const std::string &name)
     return &Racks.back();
 }
 
+// Remove a rack and destroy all dynamic module instances inside it.
 void DeleteRack(int rackID)
 {
     for (auto it = Racks.begin(); it != Racks.end(); ++it)
@@ -460,9 +488,11 @@ void DeleteRack(int rackID)
     }
 }
 
+// Instantiate a loaded MDU module and add it to the target rack.
+// Returns false with an error message when any load or factory step fails.
 bool AddDynamicModuleToRack(Rack &rack, const std::string &sourcePath, std::string *errorOut)
 {
-    const auto &loadedMap = GModuleLoader.GetLoadedModules();
+    const auto &loadedMap = GlobalModuleLoader.GetLoadedModules();
     auto it = loadedMap.find(sourcePath);
     if (it == loadedMap.end())
     {
@@ -515,6 +545,7 @@ bool AddDynamicModuleToRack(Rack &rack, const std::string &sourcePath, std::stri
     return true;
 }
 
+// Destroy the runtime instance behind a dynamic module and clear function pointers.
 void RemoveDynamicModuleFromRack(DynamicModule &module)
 {
     if (module.Instance != nullptr && module.Destroy != nullptr)
@@ -525,6 +556,7 @@ void RemoveDynamicModuleFromRack(DynamicModule &module)
     module.Destroy = nullptr;
 }
 
+// Remove one module node from every rack and delete all links that reference it.
 void RemoveNode(int nodeID)
 {
     for (auto &rack : Racks)
@@ -547,6 +579,7 @@ void RemoveNode(int nodeID)
     }
 }
 
+// Open the platform file manager at the provided folder (or nearest valid parent).
 void LaunchDefaultFileManager(const std::filesystem::path &path)
 {
     std::filesystem::path target = path;
@@ -578,6 +611,8 @@ void LaunchDefaultFileManager(const std::filesystem::path &path)
     std::system(command.c_str());
 }
 
+// Build the default template path under ~/Documents/Signal/Modules when possible.
+// Falls back to the current working directory if needed.
 std::filesystem::path GetDefaultTemplatePath()
 {
     const char *home = std::getenv("HOME");
@@ -601,6 +636,7 @@ std::filesystem::path GetDefaultTemplatePath()
 
 // --mdu handling--
 
+// Parse SIGNAL_MDU_PATHS from the environment and keep only existing absolute paths.
 std::vector<std::string> BuildMduPathsFromEnvironment()
 {
     const char *envValue = std::getenv("SIGNAL_MDU_PATHS");
@@ -658,6 +694,8 @@ std::vector<std::string> BuildMduPathsFromEnvironment()
     return resolved;
 }
 
+// Build the final module search path list from settings, env vars, and sensible defaults.
+// Persists auto-discovered paths when no explicit settings exist yet.
 std::vector<std::string> BuildMduRuntimePaths()
 {
     auto AppendUniquePaths = [](std::vector<std::string> &destination, const std::vector<std::string> &source)
@@ -680,6 +718,7 @@ std::vector<std::string> BuildMduRuntimePaths()
     const auto environmentPaths = BuildMduPathsFromEnvironment();
     auto FirstExisting = [](const std::vector<std::filesystem::path> &candidates) -> std::vector<std::string>
     {
+        // This returns a single preferred path as soon as one valid candidate exists.
         for (const auto &candidate : candidates)
         {
             std::error_code errorCode;
@@ -770,6 +809,7 @@ std::vector<std::string> BuildMduRuntimePaths()
     return runtimePaths;
 }
 
+// Add one MDU search path to loader/settings if it is valid and not already present.
 void AddMduSearchPathAndPersist(const std::string &path)
 {
     const std::vector<std::string> normalizedNewPath = MDU::NormalizeAndUniquePaths({path});
@@ -780,18 +820,19 @@ void AddMduSearchPathAndPersist(const std::string &path)
     }
 
     const std::string &newPath = normalizedNewPath.front();
-    std::vector<std::string> currentPaths = GModuleLoader.GetSearchPaths();
+    std::vector<std::string> currentPaths = GlobalModuleLoader.GetSearchPaths();
 
     if (std::find(currentPaths.begin(), currentPaths.end(), newPath) == currentPaths.end())
     {
-        GModuleLoader.AddSearchPath(newPath);
-        GFileWatcher.AddWatchPath(newPath);
+        GlobalModuleLoader.AddSearchPath(newPath);
+        GlobalFileWatcher.AddWatchPath(newPath);
         currentPaths.push_back(newPath);
     }
 
     MDU::SaveMduSearchPathsToSettingsFile(currentPaths);
 }
 
+// Remove every rack link connected to a module ID.
 void RemoveLinksForModule(Rack &rack, int moduleID)
 {
     rack.Links.erase(
@@ -801,6 +842,7 @@ void RemoveLinksForModule(Rack &rack, int moduleID)
         rack.Links.end());
 }
 
+// Unload all module instances created from a specific source path across all racks.
 void RemoveDynamicModulesFromAllRacksBySourcePath(const std::string &sourcePath)
 {
     for (auto &rack : Racks)
@@ -819,31 +861,34 @@ void RemoveDynamicModulesFromAllRacksBySourcePath(const std::string &sourcePath)
     }
 }
 
+// Poll watched MDU files and hot-reload modules as files are added, changed, or removed.
+// Performs one-time watcher/loader initialization on first call.
 void ProcessMduFileChanges()
 {
-    if (!GFileWatcherInitialized)
+    if (!GlobalFileWatcherInitialized)
     {
+        // One-time startup path wiring and initial module scan.
         const auto runtimePaths = BuildMduRuntimePaths();
-        GFileWatcher.SetWatchPaths(runtimePaths);
-        GModuleLoader.SetSearchPaths(runtimePaths);
+        GlobalFileWatcher.SetWatchPaths(runtimePaths);
+        GlobalModuleLoader.SetSearchPaths(runtimePaths);
 
         std::string loadAllError;
-        if (!GModuleLoader.ScanAndLoadAll(&loadAllError) && !loadAllError.empty())
+        if (!GlobalModuleLoader.ScanAndLoadAll(&loadAllError) && !loadAllError.empty())
         {
-            GLastMduError = loadAllError;
+            GlobalLastMduError = loadAllError;
             std::cerr << loadAllError << std::endl;
             Console::AppendConsoleLine("[error] " + loadAllError);
         }
         else
         {
-            GLastMduError.clear();
+            GlobalLastMduError.clear();
         }
 
-        GFileWatcher.PrimeSnapshot();
-        GFileWatcherInitialized = true;
+        GlobalFileWatcher.PrimeSnapshot();
+        GlobalFileWatcherInitialized = true;
     }
 
-    for (const auto &change : GFileWatcher.PollChanges())
+    for (const auto &change : GlobalFileWatcher.PollChanges())
     {
         if (change.Type == MDU::FileChangeType::Added || change.Type == MDU::FileChangeType::Modified)
         {
@@ -853,16 +898,16 @@ void ProcessMduFileChanges()
             }
 
             std::string error;
-            GModuleLoader.LoadFromMduFile(change.Path, &error);
+            GlobalModuleLoader.LoadFromMduFile(change.Path, &error);
             if (!error.empty())
             {
-                GLastMduError = error;
+                GlobalLastMduError = error;
                 std::cerr << error << std::endl;
                 Console::AppendConsoleLine("[error] " + error + " (loading " + change.Path + ")");
             }
             else
             {
-                GLastMduError.clear();
+                GlobalLastMduError.clear();
             }
         }
         else if (change.Type == MDU::FileChangeType::Removed)
@@ -870,16 +915,16 @@ void ProcessMduFileChanges()
             RemoveDynamicModulesFromAllRacksBySourcePath(change.Path);
 
             std::string error;
-            GModuleLoader.UnloadByPath(change.Path, &error);
+            GlobalModuleLoader.UnloadByPath(change.Path, &error);
             if (!error.empty())
             {
-                GLastMduError = error;
+                GlobalLastMduError = error;
                 std::cerr << error << std::endl;
                 Console::AppendConsoleLine("[error] " + error + " (unloading " + change.Path + ")");
             }
             else
             {
-                GLastMduError.clear();
+                GlobalLastMduError.clear();
             }
         }
     }

@@ -4,6 +4,7 @@
 #include "Audio/CV.h"
 
 
+// Map a normalized bipolar sample to the configured analog-style voltage range.
 float NormalizedToVoltage(float normalized, WaveForm::VoltageRange range)
 {
     double maxVoltage = 10.0;
@@ -18,6 +19,7 @@ float NormalizedToVoltage(float normalized, WaveForm::VoltageRange range)
     return (normalized * 2.0f - 1.0f) * maxVoltage;
 }
 
+// Convert a voltage in the selected range back into normalized 0..1 space.
 float VoltageToNormalized(float voltage, WaveForm::VoltageRange range)
 {
     double maxVoltage = 10.0;
@@ -32,6 +34,7 @@ float VoltageToNormalized(float voltage, WaveForm::VoltageRange range)
     return (voltage / maxVoltage + 1.0f) * 0.5f;
 }
 
+// Generate one buffer of waveform samples with CV modulation and phase continuity.
 void GetWaveFormData(WaveForm& wave, float* buffer, int bufferSize, int startSample)
 {
     if (!buffer || bufferSize <= 0) return;
@@ -61,6 +64,7 @@ void GetWaveFormData(WaveForm& wave, float* buffer, int bufferSize, int startSam
     double fineTuneRatio = std::pow(2.0, wave.fineTune / 1200.0);
     double baseFreq = wave.coarseTune * std::pow(2.0, totalOctaveShift) * fineTuneRatio;
     
+    // Linear FM shifts base frequency proportionally to FM depth and incoming CV.
     double fmFrequencyOffset = 0.0;
     if (wave.fmDepth > 0.0)
     {
@@ -82,7 +86,7 @@ void GetWaveFormData(WaveForm& wave, float* buffer, int bufferSize, int startSam
         wave.syncInput = false;
     }
 
-    // === GENERATE VCO WAVEFORM SAMPLES ===
+    // Generate each sample for the selected waveform type and advance phase.
     for (int sampleIndex = 0; sampleIndex < bufferSize; ++sampleIndex)
     {
         double value = 0.0;
@@ -145,6 +149,6 @@ void GetWaveFormData(WaveForm& wave, float* buffer, int bufferSize, int startSam
         if (phase < 0.0) phase += twoPi;
     }
     
-    // Store phase state
+    // Persist phase so the next callback continues from the same oscillator position.
     wave.Phase = phase;
 }

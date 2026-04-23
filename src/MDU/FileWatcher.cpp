@@ -4,6 +4,7 @@
 
 namespace
 {
+    // Normalize a path to an absolute, stable string form when possible.
     std::string MakeAbsolutePath(const std::string& Path)
     {
         std::error_code ErrorCode;
@@ -18,6 +19,7 @@ namespace
 
 namespace MDU
 {
+    // Replace watch roots with a normalized list of paths.
     void FileWatcher::SetWatchPaths(const std::vector<std::string>& Paths)
     {
         WatchPaths.clear();
@@ -29,31 +31,37 @@ namespace MDU
         }
     }
 
+    // Add one more normalized watch root.
     void FileWatcher::AddWatchPath(const std::string& Path)
     {
         WatchPaths.push_back(MakeAbsolutePath(Path));
     }
 
+    // Return the current watch root list.
     const std::vector<std::string>& FileWatcher::GetWatchPaths() const
     {
         return WatchPaths;
     }
 
+    // Set the file extension filter used during scans.
     void FileWatcher::SetExtensionFilter(const std::string& Extension)
     {
         ExtensionFilter = Extension;
     }
 
+    // Return the active extension filter.
     const std::string& FileWatcher::GetExtensionFilter() const
     {
         return ExtensionFilter;
     }
 
+    // Prime the baseline snapshot so future polls report deltas.
     void FileWatcher::PrimeSnapshot()
     {
         KnownFiles = BuildSnapshot();
     }
 
+    // Compare current files against the previous snapshot and emit add/modify/remove events.
     std::vector<FileChange> FileWatcher::PollChanges()
     {
         std::vector<FileChange> Changes;
@@ -84,10 +92,12 @@ namespace MDU
         return Changes;
     }
 
+    // Walk every watched folder and capture modification times for matching files.
     std::unordered_map<std::string, std::filesystem::file_time_type> FileWatcher::BuildSnapshot() const
     {
         std::unordered_map<std::string, std::filesystem::file_time_type> snapshot;
 
+        // Each watch path contributes files into one merged snapshot map.
         for (const auto& watchPath : WatchPaths)
         {
             std::error_code ErrorCode;

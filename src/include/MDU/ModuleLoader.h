@@ -26,7 +26,6 @@ namespace MDU
 		MetaData Metadata;
 		CreateFn Create = nullptr;
 		DestroyFn Destroy = nullptr;
-		GetMetaDataFn GetMetaData = nullptr;
 	};
 
 	class ModuleLoader

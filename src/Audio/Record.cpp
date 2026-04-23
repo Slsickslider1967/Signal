@@ -31,6 +31,7 @@ namespace Record
         WavWriter() = default;
         ~WavWriter() { close(); }
 
+        // Open a wav file for writing and emit a placeholder header.
         bool open(const std::string &path, int rate = 44100, int channels = 1, int bits = 16) {
             close();
             filePath = path;
@@ -44,6 +45,7 @@ namespace Record
             return true;
         }
 
+        // Finalize and close the file if one is currently open.
         void close() {
             if (file.is_open()) {
                 finalize();
@@ -53,9 +55,10 @@ namespace Record
             filePath.clear();
         }
 
+        // Return whether the output stream is open for writes.
         bool isOpen() const { return file.is_open(); }
 
-        // Writes the WAV header with a placeholder for data chunk size, which will be updated in finalize()
+        // Write the wav header with a placeholder data size patched during finalize.
         void writeHeader() {
             file.seekp(0, std::ios::beg);
             file.write("RIFF", 4);
@@ -83,6 +86,7 @@ namespace Record
             file.write(reinterpret_cast<const char *>(&dataChunkSize), 4);
         }
 
+        // Patch final RIFF/data chunk sizes once all samples are written.
         void finalize() {
             if (!file.is_open()) return;
             file.seekp(4, std::ios::beg);
@@ -93,6 +97,7 @@ namespace Record
             file.flush();
         }
 
+        // Convert normalized float samples to 16-bit PCM and append them to disk.
         void WriteSamples(const float *data, size_t count) {
             if (!file.is_open()) return;
             for (size_t i = 0; i < count; ++i) {
@@ -114,7 +119,7 @@ namespace Record
     static std::mutex GlobalRecordMutex;
     static std::string WavPath;
 
-    // File path receiver
+    // Build a default recordings directory path in the user's home folder.
     static std::string GetDefaultRecordingDirectory()
     {
         const char* home = getenv("HOME");
@@ -125,11 +130,13 @@ namespace Record
         return DefaultRecordingSubdirectory;
     }
 
+    // Build a timestamped default recording filename.
     static std::string BuildDefaultRecordingPath()
     {
         return GetDefaultRecordingDirectory() + "/recording_" + std::to_string(std::chrono::system_clock::now().time_since_epoch().count()) + ".wav";
     }
 
+    // Prepare recording state and target path before capture starts.
     void OpenWavForRecording(const std::string &path)
     {
         std::lock_guard<std::mutex> lock(GlobalRecordMutex);
@@ -143,6 +150,7 @@ namespace Record
         Console::AppendConsoleLine("[info] Ready to record to: " + WavPath);
     }
 
+    // Set an explicit save path for the next recording export.
     void SetWavPath(const std::string &path)
     {
         std::lock_guard<std::mutex> lock(GlobalRecordMutex);
@@ -150,7 +158,7 @@ namespace Record
         Console::AppendConsoleLine("[info] Save path set to: " + WavPath);
     }
 
-    // recording constrols called by Handler 
+    // Start a fresh in-memory recording capture.
     void StartRecording()
     {
         if (WavPath.empty())
@@ -166,12 +174,14 @@ namespace Record
         Console::AppendConsoleLine("[info] Recording started.");
     }
 
+    // Stop capture and keep buffered samples available for saving.
     void StopRecording()
     {
         isRecording.store(false, std::memory_order_relaxed);
         Console::AppendConsoleLine("[info] Recording stopped. Not yet saved.");
     }
 
+    // Save the currently buffered recording to disk as a wav file.
     void SaveLastRecording()
     {
         std::lock_guard<std::mutex> lock(GlobalRecordMutex);
@@ -205,6 +215,7 @@ namespace Record
             Console::AppendConsoleLine("[info] " + successMessage);
         }
 
+        // Write all cached samples in one pass once the file is opened.
         if (Global_WavWriter.open(WavPath))
         {
             Global_WavWriter.WriteSamples(CachedRecording.data(), CachedRecording.size());
@@ -220,6 +231,7 @@ namespace Record
         WavPath.clear();
     }
 
+    // Append one audio block to the recording cache while recording is active.
     void RecordSamples(const float* data, size_t count)
     {
         if (!isRecording.load(std::memory_order_relaxed) || data == nullptr || count == 0)

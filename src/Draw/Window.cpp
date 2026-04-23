@@ -25,10 +25,13 @@ namespace Window
     void ImGuiStyleSetUp(ImGuiStyle &style, ImVec4* colours);
 
     static GLFWwindow* s_Window = nullptr;
+
+    // Create the main GLFW window, load GL symbols, and initialize ImGui.
     void CreateWindow(int Width, int Height, const char* Title)
     {
         //X11 for multi viewports
         const char* preferX11 = std::getenv("PREFER_X11");
+
         if (preferX11 && preferX11[0] != '\0')
         {
             std::string Message = "PREFER_X11 detected — preferring X11 (XWayland) backend";
@@ -43,10 +46,14 @@ namespace Window
                     unsetenv("WAYLAND_DISPLAY");
         #endif
         }
+
         std::cout << "Creating window: " << Title << " (" << Width << "x" << Height << ")" << std::endl;
         Console::AppendConsoleLine("Creating window: " + std::string(Title) + " (" + std::to_string(Width) + "x" + std::to_string(Height) + ")");
+
+        // Useful for headless-style testing where only backend systems should run.
         const char* hideMain = std::getenv("HIDE_MAIN_WINDOW");
         bool hideMainWindow = (hideMain && hideMain[0] != '\0');
+        
         if (hideMainWindow)
         {
             glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
@@ -86,6 +93,7 @@ namespace Window
         std::cout << "Window created successfully (initial shouldClose=" << should << ")" << std::endl;
     }
 
+    // Destroy the window and all UI/audio backend state tied to it.
     void DestroyWindow()
     {
         std::string Message = "Destroying window";
@@ -100,11 +108,13 @@ namespace Window
         std::cout << "Window destroyed successfully" << std::endl;
     }
 
+    // Pump pending OS window/input events.
     void PollEvents()
     {
         glfwPollEvents();
     }
 
+    // Return whether the main window requested shutdown.
     bool ShouldClose()
     {
         if (!s_Window)
@@ -112,6 +122,7 @@ namespace Window
         return glfwWindowShouldClose(s_Window);
     }
 
+    // Initialize ImGui, ImPlot, and ImNodes backends against the active GLFW/OpenGL context.
     void ImGuiInit()
     {
         std::cout << "Initializing ImGui" << std::endl;
@@ -161,14 +172,14 @@ namespace Window
         }
     
 
-        // Initialize platform/renderer backends
+        // Bind platform and renderer backends after contexts are configured.
         ImGui_ImplGlfw_InitForOpenGL(s_Window, true);
         ImGui_ImplOpenGL3_Init("#version 330 core");
 
         std::cout << "ImGui initialized successfully" << std::endl;
     }
 
-    // Properly shutdown ImGui and backends
+    // Shut down ImGui and companion plotting/node contexts.
     void ImGuiShutdown()
     {
         ImGui_ImplOpenGL3_Shutdown();
@@ -180,24 +191,28 @@ namespace Window
         std::cout << "ImGui shutdown successfully" << std::endl;
     }
 
+    // Set clear color and clear the current color buffer.
     void ClearColor(float r, float g, float b, float a)
     {
         glClearColor(r, g, b, a);
         glClear(GL_COLOR_BUFFER_BIT);
     }
 
+    // Present the back buffer to the screen.
     void SwapBuffers()
     {
         if (s_Window)
             glfwSwapBuffers(s_Window);
     }
 
+    // Return true while a key is currently pressed in the main window.
     bool IsKeyPressed(int key)
     {
         if (!s_Window) return false;
         return glfwGetKey(s_Window, key) == GLFW_PRESS;
     }
 
+    // Query framebuffer size for DPI-aware rendering.
     void GetFramebufferSize(int* width, int* height)
     {
         if (!s_Window)
@@ -209,6 +224,7 @@ namespace Window
         glfwGetFramebufferSize(s_Window, width, height);
     }
 
+    // Apply the custom dark UI style used by the app.
     void ImGuiStyleSetUp(ImGuiStyle &style, ImVec4* colours)
     {
         colours[ImGuiCol_Text]                   = ImVec4(0.95f, 0.95f, 0.95f, 1.00f);

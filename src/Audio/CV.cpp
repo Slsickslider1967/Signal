@@ -16,6 +16,7 @@ namespace CV
     // --Prototypes--
 
     // --Functions--
+    // Clamp a control value to the provided numeric range.
     float ClampCV(float value, Range range)
     {
         if (value < range.min)
@@ -25,6 +26,7 @@ namespace CV
         return value;
     }
 
+    // Convert a value from its native range into normalized 0..1 space.
     float NormalizeCV(float value, Range range)
     {
         if (range.max <= range.min)
@@ -34,27 +36,32 @@ namespace CV
         return ClampCV(normalized, {0.0f, 1.0f});
     }
 
+    // Convert a normalized 0..1 value back into a target range.
     float DenormalizeCV(float normalizedValue, Range range)
     {
         const float clamped = ClampCV(normalizedValue, {0.0f, 1.0f});
         return range.min + (range.max - range.min) * clamped;
     }
 
+    // Apply a simple scalar gain to a CV signal.
     float ScaleCV(float cvValue, float amount)
     {
         return cvValue * amount;
     }
 
+    // Apply attenuverter-style scaling, including inversion when negative.
     float AttuneCV(float cvValue, float attenuverterAmount)
     {
         return cvValue * attenuverterAmount;
     }
 
+    // Add a DC offset to a CV signal.
     float OffsetCV(float cvValue, float offsetValue)
     {
         return cvValue + offsetValue;
     }
 
+    // Map a value from one range to another using linear or exponential shaping.
     float MapCV(float value, Range inRange, Range outRange, CVFunction curve)
     {
         float normalized = NormalizeCV(value, inRange);
@@ -67,6 +74,7 @@ namespace CV
         return DenormalizeCV(normalized, outRange);
     }
 
+    // Turn an incoming CV into a bipolar modulation amount and apply it to a parameter.
     float ModulateParameter(
         float baseValue,
         float cvValue,

@@ -1,14 +1,13 @@
 /*! Module
 ModuleName: "Output"
 ModuleType: "Output"
-ModuleVersion: "1.1.0"
+ModuleVersion: "1.0.1"
 Author: "Signal"
 
 Input Pins:
 - id: in_audio, label: "Audio In"
 
 Output Pins:
-- id: out_audio, label: "Audio Out"
 
 Parameters:
 - id: output_level, label: "Output Level", type: knob, min: 0.0, max: 1.0, default: 0.8
@@ -28,15 +27,13 @@ public:
 		MDU::MetaData metadata;
 		metadata.ModuleName = "Output";
 		metadata.ModuleType = "Output";
-		metadata.ModuleVersion = "1.0.0";
+		metadata.ModuleVersion = "1.0.1";
 		metadata.Author = "Signal";
 
 		metadata.InputPins.push_back({"in_audio", "Audio In"});
-		metadata.OutputPins.push_back({"out_audio", "Audio Out"});
 
 		MDU::ParameterDefinition outputLevel;
 		outputLevel.ID = "output_level";
-		outputLevel.label = "Output Level";
 		outputLevel.type = MDU::ParameterType::Knob;
 		outputLevel.minValue = 0.0f;
 		outputLevel.maxValue = 1.0f;
@@ -78,7 +75,7 @@ public:
 			{
 				PeakLevel = absSample;
 			}
-			
+
 			output[i] = sample;
 		}
 		

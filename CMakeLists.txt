@@ -131,13 +131,15 @@ add_executable(Signals
 	src/Audio/MIDIHandling.cpp
 )
 
-add_custom_command(TARGET Signals POST_BUILD
+add_custom_target(copy_runtime_mdu_modules ALL
 	COMMAND ${CMAKE_COMMAND} -E make_directory "$<TARGET_FILE_DIR:Signals>/modules"
 	COMMAND ${CMAKE_COMMAND} -E copy_directory
 		"${CMAKE_SOURCE_DIR}/modules"
 		"$<TARGET_FILE_DIR:Signals>/modules"
 	COMMENT "Copying runtime MDU modules"
 )
+
+add_dependencies(Signals copy_runtime_mdu_modules)
 
 
 	# Export executable symbols for dlopen modules (Linux/Unix only)

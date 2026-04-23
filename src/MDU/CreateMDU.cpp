@@ -8,6 +8,7 @@
 
 namespace MDU
 {
+    // Create and write a ready-to-edit template .mdu file at the target location.
     void CreateTemplateMDU(const std::filesystem::path &targetPath)
     {
         std::string templateContent =

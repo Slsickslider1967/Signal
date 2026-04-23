@@ -20,6 +20,7 @@
 
 namespace
 {
+    // Draw overlaid input/output scope traces for a module panel.
     void DrawScopeOverlay(const std::vector<float> *inputSamples,
                           const std::vector<float> *outputSamples,
                           const char *plotLabel)
@@ -54,16 +55,19 @@ namespace
         }
     }
 
+    // Build a unique imnodes attribute ID for an input pin.
     int MakeInputAttributeID(int moduleID, int pinIndex)
     {
         return moduleID * 1000 + 100 + pinIndex;
     }
 
+    // Build a unique imnodes attribute ID for an output pin.
     int MakeOutputAttributeID(int moduleID, int pinIndex)
     {
         return moduleID * 1000 + pinIndex;
     }
 
+    // Find a rack by runtime ID and return a mutable pointer.
     Rack *FindRackByID(int rackID)
     {
         for (auto &rack : Racks)
@@ -76,6 +80,7 @@ namespace
         return nullptr;
     }
 
+    // Render selectable loaded modules and add one to the rack when clicked.
     void DrawAvailableModulesChild(Rack &rack)
     {
         if (!ImGui::BeginChild("AvailableModulesChild", ImVec2(0.0f, 220.0f), true))
@@ -84,15 +89,15 @@ namespace
             return;
         }
 
-        const auto &loadedModules = GModuleLoader.GetLoadedModules();
+        const auto &loadedModules = GlobalModuleLoader.GetLoadedModules();
         ImGui::Text("Loaded: %d", static_cast<int>(loadedModules.size()));
         if (loadedModules.empty())
         {
             ImGui::TextDisabled("No loaded .mdu modules");
-            if (!GLastMduError.empty())
+            if (!GlobalLastMduError.empty())
             {
                 ImGui::Separator();
-                ImGui::TextWrapped("Last loader error: %s", GLastMduError.c_str());
+                ImGui::TextWrapped("Last loader error: %s", GlobalLastMduError.c_str());
             }
         }
         else
@@ -119,6 +124,7 @@ namespace
         ImGui::EndChild();
     }
 
+    // Handle rack context popup interactions and return whether rack deletion was requested.
     bool PopUpTool(Rack &rack)
     {
         bool requestDelete = false;
@@ -150,6 +156,7 @@ namespace
         return requestDelete;
     }
 
+    // Render all existing links for the active node editor.
     void DrawLinks(Rack &rack)
     {
         for (const auto &link : rack.Links)
@@ -160,6 +167,7 @@ namespace
         }
     }
 
+    // Create a new link when a valid output->input connection is made in the editor.
     void CreateLinks(Rack &rack)
     {
         int startAttr = 0;
@@ -201,6 +209,7 @@ namespace
         }
     }
 
+    // Draw named input/output pin attributes for one module node.
     void AddPins(const DynamicModule &module)
     {
         for (int i = 0; i < module.InPins; ++i)
@@ -246,15 +255,16 @@ namespace
         }
     }
 
+    // Render the detachable debug console window.
     void Debug()
     {
-        if (!GShowDebugConsole)
+        if (!GlobalShowDebugConsole)
         {
             return;
         }
 
         ImGui::SetNextWindowSize(ImVec2(900, 420), ImGuiCond_FirstUseEver);
-        ImGui::Begin("Debug Console", &GShowDebugConsole);
+        ImGui::Begin("Debug Console", &GlobalShowDebugConsole);
 
         ImGui::SameLine();
 
@@ -290,11 +300,12 @@ namespace
 
 namespace Draw
 {
+    // Initialize the app window and audio pipeline for the editor session.
     void MainWindow()
     {
-#if (defined(__linux__) || defined(__unix__) || defined(__APPLE__))
-        setenv("PREFER_X11", "1", 1);
-#endif
+        #if (defined(__linux__) || defined(__unix__) || defined(__APPLE__))
+                setenv("PREFER_X11", "1", 1);
+        #endif
         int Width = 1020;
         int Height = 720;
         Window::CreateWindow(Width, Height, "Signal Handler");
@@ -303,12 +314,14 @@ namespace Draw
         Window::PollEvents();
     }
 
+    // Tear down rendering window and audio resources.
     void CleanUp()
     {
         Window::DestroyWindow();
         ShutdownAudioHandling();
     }
 
+    // Render one frame and present it.
     void Render()
     {
         Window::ClearColor(0.08f, 0.08f, 0.10f, 1.0f);
@@ -317,10 +330,12 @@ namespace Draw
         Window::PollEvents();
     }
 
+    // Draw the top menu bar and global actions like rack/module/file/record/help.
     void DrawTopBar()
     {
         if (ImGui::BeginMainMenuBar())
         {
+            // Rack menu groups creation, deletion, and future save/load actions.
             if (ImGui::BeginMenu("Rack"))
             {
                 if (ImGui::MenuItem("Add Rack"))
@@ -354,15 +369,15 @@ namespace Draw
 
                 ImGui::Separator();
 
-                if (ImGui::MenuItem("Save Racks (not implemented)"))
-                {
-                    Console::AppendConsoleLine("[info] Save Racks triggered (not implemented)");
-                }
+                // if (ImGui::MenuItem("Save Racks (not implemented)"))
+                // {
+                //     Console::AppendConsoleLine("[info] Save Racks triggered (not implemented)");
+                // }
 
-                if (ImGui::MenuItem("Load Racks (not implemented)"))
-                {
-                    Console::AppendConsoleLine("[info] Load Racks triggered (not implemented)");
-                }
+                // if (ImGui::MenuItem("Load Racks (not implemented)"))
+                // {
+                //     Console::AppendConsoleLine("[info] Load Racks triggered (not implemented)");
+                // }
 
                 ImGui::EndMenu();
             }
@@ -386,6 +401,7 @@ namespace Draw
             static bool showSaveDialog = false;
             static bool popupJustOpened = false;
             static char saveFileName[256] = "";
+            // Record menu controls capture lifecycle and saving.
             if (ImGui::BeginMenu("Record"))
             {
                 if (ImGui::MenuItem("Start Recording"))
@@ -441,7 +457,7 @@ namespace Draw
             {
                 if (ImGui::MenuItem("Open Template Folder"))
                 {
-                    LaunchDefaultFileManager(GModuleLoader.GetTemplatePath());
+                    LaunchDefaultFileManager(GlobalModuleLoader.GetTemplatePath());
                 }
                 if (ImGui::MenuItem("Open Recordings Folder"))
                 {
@@ -461,7 +477,7 @@ namespace Draw
                 ImGui::Separator();
                 if (ImGui::MenuItem("Create Template MDU"))
                 {
-                    MDU::CreateTemplateMDU(GModuleLoader.GetTemplatePath());
+                    MDU::CreateTemplateMDU(GlobalModuleLoader.GetTemplatePath());
                 }
                 ImGui::Separator();
                 if (ImGui::BeginMenu("Set MDU Search Paths"))
@@ -479,7 +495,7 @@ namespace Draw
                         }
                     }
                     ImGui::Separator();
-                    const auto &searchPaths = GModuleLoader.GetSearchPaths();
+                    const auto &searchPaths = GlobalModuleLoader.GetSearchPaths();
                     if (searchPaths.empty())
                     {
                         ImGui::TextDisabled("No search paths set");
@@ -518,7 +534,7 @@ namespace Draw
                 ImGui::Separator();
                 if (ImGui::MenuItem("Console"))
                 {
-                    GShowDebugConsole = true;
+                    GlobalShowDebugConsole = true;
                 }
                 ImGui::EndMenu();
             }
@@ -537,6 +553,7 @@ namespace Draw
         Debug();
     }
 
+    // Draw the node editor for one rack, including modules, links, and context actions.
     void DrawRackEditor(Rack &rack)
     {
         ImNodes::BeginNodeEditor();
@@ -548,6 +565,7 @@ namespace Draw
 
         bool openContextMenu = ImNodes::IsEditorHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Right);
 
+        // Draw each module node with pins and metadata.
         for (auto moduleIt = rack.DynamicModules.begin(); moduleIt != rack.DynamicModules.end(); ++moduleIt)
         {
             DynamicModule &module = *moduleIt;
@@ -593,14 +611,17 @@ namespace Draw
         }
     }
 
+    // Thin wrapper to expose the shared popup helper through Draw namespace.
     bool PopUpTool(Rack &rack)
     {
         return ::PopUpTool(rack);
     }
 
+    // Draw the selected module details panel, including controls and live scope view.
     void DrawModuleDetails()
     {
         DynamicModule *selectedModule = nullptr;
+        // Locate the currently selected module across all racks.
         for (auto &rack : Racks)
         {
             for (auto &module : rack.DynamicModules)
@@ -658,10 +679,10 @@ namespace Draw
             ImGui::Spacing();
             ImGui::Separator();
             ImGui::Text("Signal Scope");
-            auto inputIt = GModuleScopeInputs.find(selectedModule->ID);
-            auto outputIt = GModuleScopeOutputs.find(selectedModule->ID);
+            auto inputIt = GlobaloduleScopeInputs.find(selectedModule->ID);
+            auto outputIt = GlobalModuleScopeOutputs.find(selectedModule->ID);
 
-            if (inputIt == GModuleScopeInputs.end() || outputIt == GModuleScopeOutputs.end())
+            if (inputIt == GlobaloduleScopeInputs.end() || outputIt == GlobalModuleScopeOutputs.end())
             {
                 ImGui::TextDisabled("No scope data yet. Start audio and run the patch.");
             }
