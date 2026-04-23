@@ -9,8 +9,6 @@
 
         Output Pins:
         - id: cv_out, label: "Audio Out"
-
-        Parameters:
         */
 
         #include "mdu_api.h"
@@ -20,7 +18,6 @@
         class TriggerModule : public MDU::Module
         {
             private:
-                float TriggerID = 1.0f;
                 float PulseMs = 10.0f;
                 std::atomic<bool> PendingTrigger{false};
                 std::atomic<bool> GateHeld{false};
@@ -125,31 +122,6 @@
                     ImGui::SliderFloat("Pulse Width (ms)", &PulseMs, 1.0f, 200.0f, "%.1f");
                 }
 
-                bool SetParameter(const string &parameterID, float outValue) override
-                {
-                    if (parameterID != "TriggerID")
-                    {
-                        return false;
-                    }
-
-                    if (outValue < 0.1f)
-                        outValue = 0.1f;
-                    if (outValue > 20.0f)
-                        outValue = 20.0f;
-                    TriggerID = outValue;
-                    return true;
-                }
-
-                bool GetParameter(const string &parameterID, float &outValue) override
-                {
-                    if (parameterID != "TriggerID")
-                    {
-                        return false;
-                    }
-
-                    outValue = TriggerID;
-                    return true;
-                }
         };
 
 

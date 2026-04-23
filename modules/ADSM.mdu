@@ -10,12 +10,6 @@ Input Pins:
 
 Output Pins:
 - id: envelope_out, label: "Envelope Out"
-
-Parameters:
-- id: attack, label: "Attack", type: knob, min: 0.01, max: 1000.0, default: 10.0
-- id: decay, label: "Decay", type: knob, min: 0.01, max: 1000.0, default: 100.0
-- id: sustain, label: "Sustain", type: knob, min: 0.0, max: 1.0, default: 0.5
-- id: release, label: "Release", type: knob, min: 0.01, max: 1000.0, default: 100.0
 */
 
 #include <cmath>
@@ -36,11 +30,6 @@ public:
         metadata.InputPins.push_back({"trigger_in", "Trigger"});
         metadata.InputPins.push_back({"gate_in", "Gate"});
         metadata.OutputPins.push_back({"envelope_out", "Envelope Out"});
-
-        metadata.Parameters.push_back({"attack", "Attack", MDU::ParameterType::Knob, 0.01f, 1000.0f, 10.0f, {}});
-        metadata.Parameters.push_back({"decay", "Decay", MDU::ParameterType::Knob, 0.01f, 1000.0f, 100.0f, {}});
-        metadata.Parameters.push_back({"sustain", "Sustain", MDU::ParameterType::Knob, 0.0f, 1.0f, 0.5f, {}});
-        metadata.Parameters.push_back({"release", "Release", MDU::ParameterType::Knob, 0.01f, 1000.0f, 100.0f, {}});
 
         return metadata;
     }
@@ -143,64 +132,6 @@ public:
         ImGui::Text("State: %s", stateNames[State]);
         ImGui::ProgressBar(Envelope, ImVec2(-1, 0), "");
         ImGui::PopID();
-    }
-
-    bool SetParameter(const string &parameterID, float outValue) override
-    {
-        if (parameterID == "attack")
-        {
-            if (outValue < 0.01f) outValue = 0.01f;
-            if (outValue > 1000.0f) outValue = 1000.0f;
-            Attack = outValue;
-            return true;
-        }
-        if (parameterID == "decay")
-        {
-            if (outValue < 0.01f) outValue = 0.01f;
-            if (outValue > 1000.0f) outValue = 1000.0f;
-            Decay = outValue;
-            return true;
-        }
-        if (parameterID == "sustain")
-        {
-            if (outValue < 0.0f) outValue = 0.0f;
-            if (outValue > 1.0f) outValue = 1.0f;
-            Sustain = outValue;
-            return true;
-        }
-        if (parameterID == "release")
-        {
-            if (outValue < 0.01f) outValue = 0.01f;
-            if (outValue > 1000.0f) outValue = 1000.0f;
-            Release = outValue;
-            return true;
-        }
-        return false;
-    }
-
-    bool GetParameter(const string &parameterID, float &outValue) override
-    {
-        if (parameterID == "attack")
-        {
-            outValue = Attack;
-            return true;
-        }
-        if (parameterID == "decay")
-        {
-            outValue = Decay;
-            return true;
-        }
-        if (parameterID == "sustain")
-        {
-            outValue = Sustain;
-            return true;
-        }
-        if (parameterID == "release")
-        {
-            outValue = Release;
-            return true;
-        }
-        return false;
     }
 
 private:

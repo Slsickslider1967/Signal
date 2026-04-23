@@ -8,9 +8,6 @@ Input Pins:
 - id: in_audio, label: "Audio In"
 
 Output Pins:
-
-Parameters:
-- id: output_level, label: "Output Level", type: knob, min: 0.0, max: 1.0, default: 0.8
 */
 
 #include "mdu_api.h"
@@ -94,37 +91,6 @@ public:
 		}
 		
 		ImGui::PopID();
-	}
-
-	bool SetParameter(const string &parameterID, float outValue) override
-	{
-		if (parameterID != "output_level")
-		{
-			return false;
-		}
-
-		if (outValue < 0.0f)
-		{
-			outValue = 0.0f;
-		}
-		if (outValue > 1.0f)
-		{
-			outValue = 1.0f;
-		}
-
-		OutputLevel = outValue;
-		return true;
-	}
-
-	bool GetParameter(const string &parameterID, float &outValue) override
-	{
-		if (parameterID != "output_level")
-		{
-			return false;
-		}
-
-		outValue = OutputLevel;
-		return true;
 	}
 
 private:

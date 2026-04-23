@@ -69,9 +69,6 @@ namespace MDU
 
             virtual void Process(const BufferView& ID, float value) = 0;
             virtual void DrawEditor() = 0;
-
-            virtual bool SetParameter(const string& ParameterID, float OutValue) = 0;
-            virtual bool GetParameter(const string& ParameterID, float& OutValue) = 0;
     };
 
     using CreateFn = Module* (*)();

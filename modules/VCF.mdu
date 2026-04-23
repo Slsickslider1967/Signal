@@ -11,11 +11,6 @@ Input Pins:
 
 Output Pins:
 - id: audio_out, label: "Audio Out"
-
-Parameters:
-- id: cutoff_hz, label: "Cutoff", type: knob, min: 20.0, max: 20000.0, default: 1000.0
-- id: resonance, label: "Resonance", type: knob, min: 0.0, max: 1.0, default: 0.3
-- id: filter_type, label: "Filter Type", type: stepped, min: 0, max: 3, default: 0
 */
 
 #include <cmath>
@@ -37,10 +32,6 @@ public:
         metadata.InputPins.push_back({"cutoff_cv", "Cutoff CV"});
         metadata.InputPins.push_back({"resonance_cv", "Res CV"});
         metadata.OutputPins.push_back({"audio_out", "Audio Out"});
-
-        metadata.Parameters.push_back({"cutoff_hz", "Cutoff", MDU::ParameterType::Knob, 20.0f, 20000.0f, 1000.0f, {}});
-        metadata.Parameters.push_back({"resonance", "Resonance", MDU::ParameterType::Knob, 0.0f, 1.0f, 0.5f, {}});
-        metadata.Parameters.push_back({"filter_type", "Filter Type", MDU::ParameterType::Stepped, 0.0f, 3.0f, 0.0f, {"LowPass", "HighPass", "BandPass", "Notch"}});
 
         return metadata;
     }
@@ -137,59 +128,6 @@ public:
             FilterType = type;
         }
         ImGui::PopID();
-    }
-
-    bool SetParameter(const string &parameterID, float outValue) override
-    {
-        if (parameterID == "cutoff_hz")
-        {
-            if (outValue < 20.0f)
-                outValue = 20.0f;
-            if (outValue > 20000.0f)
-                outValue = 20000.0f;
-            CutoffHz = outValue;
-            return true;
-        }
-        if (parameterID == "resonance")
-        {
-            if (outValue < 0.0f)
-                outValue = 0.0f;
-            if (outValue > 1.0f)
-                outValue = 1.0f;
-            Resonance = outValue;
-            return true;
-        }
-        if (parameterID == "filter_type")
-        {
-            int type = static_cast<int>(outValue);
-            if (type < 0)
-                type = 0;
-            if (type > 3)
-                type = 3;
-            FilterType = type;
-            return true;
-        }
-        return false;
-    }
-
-    bool GetParameter(const string &parameterID, float &outValue) override
-    {
-        if (parameterID == "cutoff_hz")
-        {
-            outValue = CutoffHz;
-            return true;
-        }
-        if (parameterID == "resonance")
-        {
-            outValue = Resonance;
-            return true;
-        }
-        if (parameterID == "filter_type")
-        {
-            outValue = static_cast<float>(FilterType);
-            return true;
-        }
-        return false;
     }
 
 private:

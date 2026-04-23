@@ -132,17 +132,19 @@ namespace
 namespace MDU
 {
     // Map a type string to ParameterType, case-insensitively.
-    ParameterType ParameterTypeFromString(const std::string& text)
+    ParameterType ParameterTypeFromString(const std::string& Text)
     {
-        std::string Str = text;
-        std::transform(Str.begin(), Str.end(), Str.begin(), [](unsigned char c){ return static_cast<char>(std::tolower(c)); });
+        std::string Str = Text;
+        std::transform(Str.begin(), Str.end(), Str.begin(), [](unsigned char Character)
+        {
+            return static_cast<char>(std::tolower(Character));
+        });
 
         if (Str == "knob") return ParameterType::Knob;
         if (Str == "slider") return ParameterType::Slider;
         if (Str == "stepped") return ParameterType::Stepped;
         if (Str == "toggle") return ParameterType::Toggle;
         if (Str == "combo") return ParameterType::Combo;
-
         return ParameterType::Knob;
     }
 
@@ -156,7 +158,7 @@ namespace MDU
             case ParameterType::Stepped: return "Stepped";
             case ParameterType::Toggle: return "Toggle";
             case ParameterType::Combo: return "Combo";
-            default: return "Unknown";
+            default: return "Knob";
         }
     }
 
@@ -386,13 +388,9 @@ namespace MDU
         {
             return {false, {}, "[MDP009] At least one input or output pin is required."};
         }
-        if (metadata.Parameters.empty())
-        {
-            return {false, {}, "[MDP010] At least one parameter is required."};
-        }
         if (metadata.ModuleType.empty())
         {
-            return {false, {}, "[MDP011] ModuleType is required but missing from header."};
+            return {false, {}, "[MDP010] ModuleType is required but missing from header."};
         }
 
         return {true, metadata, ""};

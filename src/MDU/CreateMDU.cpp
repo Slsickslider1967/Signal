@@ -24,9 +24,6 @@ namespace MDU
 
         Output Pins:
         - id: cv_out, label: "Audio Out"
-
-        Parameters:
-        - id: TemplateID, label: "Template", type: knob, min: 0.1, max: 20.0, default: 1.0
         */
 
         #include "mdu_api.h"
@@ -35,7 +32,7 @@ namespace MDU
         {
             private:
                 float TemplateID = 1.0f;
-                
+
             public:
                 static MDU::MetaData BuildMetadata()
                 {
@@ -47,7 +44,6 @@ namespace MDU
 
                     metadata.InputPins.push_back({"rate_cv", "Audio In"});
                     metadata.OutputPins.push_back({"cv_out", "Audio Out"});
-                    metadata.Parameters.push_back({"TemplateID", "Template", MDU::ParameterType::Knob, 0.1f, 20.0f, 1.0f, {}});
 
                     return metadata;
                 }
@@ -68,32 +64,6 @@ namespace MDU
                 }
 
                 void DrawEditor() override {}
-
-                bool SetParameter(const string &parameterID, float outValue) override
-                {
-                    if (parameterID != "TemplateID")
-                    {
-                        return false;
-                    }
-
-                    if (outValue < 0.1f)
-                        outValue = 0.1f;
-                    if (outValue > 20.0f)
-                        outValue = 20.0f;
-                    TemplateID = outValue;
-                    return true;
-                }
-
-                bool GetParameter(const string &parameterID, float &outValue) override
-                {
-                    if (parameterID != "TemplateID")
-                    {
-                        return false;
-                    }
-
-                    outValue = TemplateID;
-                    return true;
-                }
         };
 
 
