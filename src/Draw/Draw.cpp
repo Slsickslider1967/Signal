@@ -383,9 +383,29 @@ namespace Draw
             }
             if (ImGui::BeginMenu("Modules"))
             {
+                auto removeSelectedModules = []()
+                {
+                    if (SelectedModuleIDs.empty())
+                    {
+                        return;
+                    }
+
+                    std::vector<int> moduleIDs(SelectedModuleIDs.begin(), SelectedModuleIDs.end());
+                    for (int moduleID : moduleIDs)
+                    {
+                        RemoveNode(moduleID);
+                    }
+                    SelectedModuleIDs.clear();
+                };
+
                 if (ImGui::BeginMenu("Add Module to Selected Rack"))
                 {
-                    Rack *selectedRack = FindRackByID(SelectedRackID);
+                    Rack *selectedRack = nullptr;
+                    if (!SelectedRackIDs.empty())
+                    {
+                        selectedRack = FindRackByID(SelectedRackIDs.back());
+                    }
+
                     if (selectedRack == nullptr)
                     {
                         ImGui::TextDisabled("Select a Rack First");
@@ -396,11 +416,77 @@ namespace Draw
                     }
                     ImGui::EndMenu();
                 }
+
+                if (ImGui::BeginMenu("Remove Selected Modules"))
+                {
+                    Rack *selectedRack = nullptr;
+                    if (!SelectedRackIDs.empty())
+                    {
+                        selectedRack = FindRackByID(SelectedRackIDs.back());
+                    }
+
+                    if (selectedRack == nullptr)
+                    {
+                        ImGui::TextDisabled("Select a Rack First");
+                    }
+                    else if (selectedRack->DynamicModules.empty())
+                    {
+                        ImGui::TextDisabled("No modules in selected rack");
+                    }
+                    else
+                    {
+                        ImGui::TextDisabled("Check modules to include in Remove all selected Modules");
+                        ImGui::Separator();
+                        if (ImGui::Button("Remove Selected"))
+                        {
+                            if (!SelectedModuleIDs.empty())
+                            {
+                                std::vector<int> moduleIDs(SelectedModuleIDs.begin(), SelectedModuleIDs.end());
+                                for (int moduleID : moduleIDs)
+                                {
+                                    RemoveNode(moduleID);
+                                }
+                                SelectedModuleIDs.clear();
+                            }
+                        }
+
+                        ImGui::BeginChild("RemoveSelectedModulesChild", ImVec2(0.0f, 220.0f), true, ImGuiWindowFlags_HorizontalScrollbar);
+                        for (const auto &module : selectedRack->DynamicModules)
+                        {
+                            bool moduleSelected = std::find(SelectedModuleIDs.begin(), SelectedModuleIDs.end(), module.ID) != SelectedModuleIDs.end();
+                            std::string checkboxLabel = "##SelectModuleToRemove" + std::to_string(module.ID);
+                            if (ImGui::Checkbox(checkboxLabel.c_str(), &moduleSelected))
+                            {
+                                if (moduleSelected)
+                                {
+                                    if (std::find(SelectedModuleIDs.begin(), SelectedModuleIDs.end(), module.ID) == SelectedModuleIDs.end())
+                                    {
+                                        SelectedModuleIDs.push_back(module.ID);
+                                    }
+                                }
+                                else
+                                {
+                                    SelectedModuleIDs.remove(module.ID);
+                                }
+                            }
+
+                            ImGui::SameLine();
+                            ImGui::Text("%s", module.Name.c_str());
+                        }
+                        ImGui::EndChild();
+                    }
+                    ImGui::EndMenu();
+                }
+
+                ImGui::Separator();
+
                 ImGui::EndMenu();
             }
+
             static bool showSaveDialog = false;
             static bool popupJustOpened = false;
             static char saveFileName[256] = "";
+
             // Record menu controls capture lifecycle and saving.
             if (ImGui::BeginMenu("Record"))
             {
@@ -559,7 +645,10 @@ namespace Draw
         ImNodes::BeginNodeEditor();
         if (ImNodes::IsEditorHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left))
         {
-            SelectedRackID = rack.ID;
+            if (std::find(SelectedRackIDs.begin(), SelectedRackIDs.end(), rack.ID) == SelectedRackIDs.end())
+            {
+                SelectedRackIDs.push_back(rack.ID);
+            }
             SelectedModuleID = -1;
         }
 
@@ -593,7 +682,7 @@ namespace Draw
         DrawLinks(rack);
         ImNodes::EndNodeEditor();
 
-        if (openContextMenu)
+        if (openContextMenu && !ShowModuleDetails && SelectedModuleID == -1)
         {
             ImGui::OpenPopup("RackContextMenu");
         }
@@ -721,7 +810,7 @@ namespace Draw
 
         if (!windowOpen)
         {
-            SelectedModuleID = -1;
+            ShowModuleDetails = false;
         }
     }
 }

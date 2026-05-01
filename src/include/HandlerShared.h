@@ -23,9 +23,11 @@ extern int NextRackID;
 extern int NextModuleID;
 extern int NextLinkID;
 extern int SelectedModuleID;
-extern int SelectedRackID;
 
+extern std::list<int> SelectedRackIDs;
+extern std::list<int> SelectedModuleIDs;
 extern std::list<Rack> Racks;
+
 
 extern MDU::ModuleLoader GlobalModuleLoader;
 extern std::mutex GlobalRackMutex;
@@ -36,6 +38,7 @@ extern std::map<int, std::vector<float>> GlobalModuleScopeOutputs;
 
 extern bool GlobalShowDebugConsole;
 extern bool IsRecording;
+extern bool ShowModuleDetails;
 
 Rack *CreateRack(const std::string &name);
 void DeleteRack(int rackID);

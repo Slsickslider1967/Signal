@@ -45,8 +45,9 @@ int NextRackID = 1;
 int NextModuleID = 1;
 int NextLinkID = 1;
 int SelectedModuleID = -1;
-int SelectedRackID = -1;
 
+std::list<int> SelectedRackIDs;
+std::list<int> SelectedModuleIDs;
 std::list<Rack> Racks;
 
 MDU::ModuleLoader GlobalModuleLoader;
@@ -61,6 +62,7 @@ std::map<int, std::vector<float>> GlobalModuleScopeOutputs;
 
 static bool GlobalFileWatcherInitialized = false;
 bool GlobalShowDebugConsole = false;
+bool ShowModuleDetails = false;
 bool IsRecording = false;
 
 // K meaning constant
@@ -272,7 +274,15 @@ int main()
             bool rackOpen = ImGui::TreeNodeEx(rackHeaderLabel.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
             if (ImGui::IsItemClicked())
             {
-                SelectedRackID = rack.ID;
+                auto selectedIt = std::find(SelectedRackIDs.begin(), SelectedRackIDs.end(), rack.ID);
+                if (selectedIt == SelectedRackIDs.end())
+                {
+                    SelectedRackIDs.push_back(rack.ID);
+                }
+                else
+                {
+                    SelectedRackIDs.erase(selectedIt);
+                }
             }
 
             if (rackOpen)
@@ -297,7 +307,13 @@ int main()
 
         ImGui::End();
 
-        if (SelectedModuleID != -1)
+
+        if (SelectedModuleID != -1 && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+        {
+            ShowModuleDetails = true;
+        }
+
+        if (ShowModuleDetails)
         {
             Draw::DrawModuleDetails();
         }
@@ -483,6 +499,7 @@ void DeleteRack(int rackID)
             RemoveDynamicModuleFromRack(module);
         }
 
+        SelectedRackIDs.remove(rackID);
         Racks.erase(it);
         return;
     }
@@ -559,6 +576,12 @@ void RemoveDynamicModuleFromRack(DynamicModule &module)
 // Remove one module node from every rack and delete all links that reference it.
 void RemoveNode(int nodeID)
 {
+    SelectedModuleIDs.remove(nodeID);
+    if (SelectedModuleID == nodeID)
+    {
+        SelectedModuleID = -1;
+    }
+
     for (auto &rack : Racks)
     {
         rack.DynamicModules.remove_if([nodeID](DynamicModule &module)
