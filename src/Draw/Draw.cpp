@@ -367,7 +367,7 @@ namespace Draw
                     ImGui::EndMenu();
                 }
 
-                ImGui::Separator();
+                //  ImGui::Separator();
 
                 // if (ImGui::MenuItem("Save Racks (not implemented)"))
                 // {
@@ -417,7 +417,7 @@ namespace Draw
                     ImGui::EndMenu();
                 }
 
-                if (ImGui::BeginMenu("Remove Selected Modules"))
+                if (ImGui::BeginMenu("Remove Module from Selected Rack"))
                 {
                     Rack *selectedRack = nullptr;
                     if (!SelectedRackIDs.empty())
@@ -477,8 +477,6 @@ namespace Draw
                     }
                     ImGui::EndMenu();
                 }
-
-                ImGui::Separator();
 
                 ImGui::EndMenu();
             }
