@@ -369,15 +369,15 @@ namespace Draw
 
                 ImGui::Separator();
 
-                // if (ImGui::MenuItem("Save Racks (not implemented)"))
-                // {
-                //     Console::AppendConsoleLine("[info] Save Racks triggered (not implemented)");
-                // }
+                if (ImGui::MenuItem("Save Racks (not implemented)"))
+                {
+                    Console::AppendConsoleLine("[info] Save Racks triggered (not implemented)");
+                }
 
-                // if (ImGui::MenuItem("Load Racks (not implemented)"))
-                // {
-                //     Console::AppendConsoleLine("[info] Load Racks triggered (not implemented)");
-                // }
+                if (ImGui::MenuItem("Load Racks (not implemented)"))
+                {
+                    Console::AppendConsoleLine("[info] Load Racks triggered (not implemented)");
+                }
 
                 ImGui::EndMenu();
             }
@@ -479,6 +479,19 @@ namespace Draw
                 }
 
                 ImGui::Separator();
+
+                if (ImGui::MenuItem("Remove selected Modules"))
+                {
+                    if (!SelectedModuleIDs.empty())
+                    {
+                        std::vector<int> moduleIDs(SelectedModuleIDs.begin(), SelectedModuleIDs.end());
+                        for (int moduleID : moduleIDs)
+                        {
+                            RemoveNode(moduleID);
+                        }
+                        SelectedModuleIDs.clear();
+                    }
+                }
 
                 ImGui::EndMenu();
             }
