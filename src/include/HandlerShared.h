@@ -16,6 +16,7 @@ struct Rack
     std::string Name;
     std::list<DynamicModule> DynamicModules;
     std::vector<Link> Links;
+    int VoltageRange = 0; // 0: -5V to +5V, 1: -10V to +10V, 2: 0V to +5V, 3: 0V to +10V
     bool Enabled = true;
 };
 

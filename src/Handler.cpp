@@ -412,6 +412,7 @@ void AudioFilterCallback(float *buffer, int numSamples, void *userData)
             bufferView.OutputPins.assign(outputPins.begin(), outputPins.end());
             bufferView.NumberOfSamples = static_cast<size_t>(numSamples);
             bufferView.SampleRate = 44100;
+            bufferView.VoltageRange = rack.VoltageRange;
 
             if (module->Instance != nullptr)
             {

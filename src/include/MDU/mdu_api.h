@@ -60,6 +60,7 @@ namespace MDU
         vector<float*> OutputPins; 
         size_t NumberOfSamples = 0;
         int SampleRate = 44100;
+        int VoltageRange = 0;  // 0: ±5V, 1: ±10V, 2: ±12V, 3: ±15V
     };
 
     class Module
