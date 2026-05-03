@@ -8,6 +8,7 @@ Input Pins:
 - id: in_audio, label: "Audio In"
 
 Output Pins:
+- id: out_audio, label: "Audio Out"
 */
 
 #include "mdu_api.h"
@@ -28,6 +29,8 @@ public:
 		metadata.Author = "Signal";
 
 		metadata.InputPins.push_back({"in_audio", "Audio In"});
+
+		metadata.OutputPins.push_back({"out_audio", "Audio Out"});
 
 		MDU::ParameterDefinition outputLevel;
 		outputLevel.ID = "output_level";
