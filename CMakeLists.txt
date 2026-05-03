@@ -123,6 +123,7 @@ add_executable(Signals
 	src/Draw/Draw.cpp
 	src/Draw/ImGuiUtil.cpp
 	src/Draw/Window.cpp
+	src/Draw/TopBar.cpp
 	src/Audio/Audio.cpp
 	src/Audio/CV.cpp
 	src/Audio/WaveForm.cpp
