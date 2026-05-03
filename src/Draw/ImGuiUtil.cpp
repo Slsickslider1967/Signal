@@ -103,43 +103,4 @@ namespace ImGuiUtil
     {
         ImGui::EndFrame();
     }
-
-    // void Oscilloscope(WaveForm &wave, const char *label)
-    // {
-    //     float nyquist = static_cast<float>(wave.SampleRate) * 0.5f;
-    //     float freqMax = std::min(20000.0f, nyquist);
-    //     if (wave.Frequency > freqMax)
-    //     {
-    //         wave.Frequency = freqMax;
-    //         ImGui::TextColored(ImVec4(1, 0.5f, 0, 1), "Frequency clamped to Nyquist: %.0f Hz", freqMax);
-    //     }
-
-    //     int displaySamples = std::min(wave.SampleRate, 2048);
-
-    //     WaveForm referenceWave = wave;
-    //     referenceWave.vOctCV = 0.5f;
-    //     referenceWave.linearFMCV = 0.5f;
-    //     referenceWave.fmDepth = 0.0f;
-
-    //     std::vector<float> referenceBuffer(displaySamples);
-    //     GetWaveFormData(referenceWave, referenceBuffer.data(), displaySamples, wave.displayOffset);
-
-    //     std::vector<float> displayBuffer(displaySamples);
-    //     GetWaveFormData(wave, displayBuffer.data(), displaySamples, wave.displayOffset);
-    //     RenderDualSignalPlot(displayBuffer.data(), referenceBuffer.data(), displaySamples, label, -1.05f, 1.05f);
-
-    //     ImGui::TextColored(ImVec4(0.20f, 0.55f, 0.95f, 1.0f), "Blue = reference");
-    //     ImGui::SameLine();
-    //     ImGui::TextColored(ImVec4(0.92f, 0.18f, 0.20f, 1.0f), "Red = output");
-
-    //     // Advance display offset so waveform scrolls. ~16ms.
-    //     int displayAdvanceSamples = std::max(1, static_cast<int>(wave.SampleRate * 0.0016f));
-    //     int displayWrapLength = std::max(1, wave.SampleRate * 1000);
-    //     wave.displayOffset = (wave.displayOffset + displayAdvanceSamples) % displayWrapLength;
-    // }
-
-    // void PlotSignal(const float *samples, int sampleCount, const char *label, float minY, float maxY)
-    // {
-    //     RenderSignalPlot(samples, sampleCount, label, minY, maxY);
-    // }
 }
