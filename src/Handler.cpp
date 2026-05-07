@@ -308,10 +308,10 @@ int main()
         ImGui::End();
 
 
-        if (SelectedModuleID != -1 && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
-        {
-            ShowModuleDetails = true;
-        }
+        // if (SelectedModuleID != -1 && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+        // {
+        //     ShowModuleDetails = true;
+        // }
 
         if (ShowModuleDetails)
         {

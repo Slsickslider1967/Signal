@@ -116,21 +116,27 @@ target_link_libraries(imgui_knobs_lib PUBLIC imgui)
 
 add_executable(Signals
 	src/Handler.cpp
+	
 	src/MDU/ModuleLoader.cpp
 	src/MDU/FileWatcher.cpp
 	src/MDU/mduParser.cpp
 	src/MDU/CreateMDU.cpp
+
 	src/Draw/Draw.cpp
 	src/Draw/ImGuiUtil.cpp
 	src/Draw/Window.cpp
 	src/Draw/TopBar.cpp
 	src/Draw/PopUp.cpp
+
+	src/Draw/UI/RackContextMenu.cpp
+
 	src/Audio/Audio.cpp
 	src/Audio/CV.cpp
-	src/Audio/WaveForm.cpp
-	src/Functions/ConsoleHandling.cpp
+	src/Audio/WaveForm.cpp	
 	src/Audio/Record.cpp
 	src/Audio/MIDIHandling.cpp
+
+	src/Functions/ConsoleHandling.cpp
 )
 
 add_custom_target(copy_runtime_mdu_modules ALL

@@ -17,6 +17,7 @@
 #include "Draw/Window.h"
 #include "Functions/ConsoleHandling.h"
 #include "MDU/CreateMDU.h"
+#include "../include/Audio/UI/RackContextMenu.h"
 
 namespace Draw
 {
@@ -79,8 +80,6 @@ namespace Draw
         }
         return nullptr;
     }
-
-
 
     // Render all existing links for the active node editor.
     void DrawLinks(Rack &rack)
@@ -229,9 +228,9 @@ namespace Draw
     // Initialize the app window and audio pipeline for the editor session.
     void MainWindow()
     {
-        #if (defined(__linux__) || defined(__unix__) || defined(__APPLE__))
-                setenv("PREFER_X11", "1", 1);
-        #endif
+#if (defined(__linux__) || defined(__unix__) || defined(__APPLE__))
+        setenv("PREFER_X11", "1", 1);
+#endif
         int Width = 1020;
         int Height = 720;
         Window::CreateWindow(Width, Height, "Signal Handler");
@@ -256,7 +255,6 @@ namespace Draw
         Window::PollEvents();
     }
 
-
     // Draw the node editor for one rack, including modules, links, and context actions.
     void DrawRackEditor(Rack &rack)
     {
@@ -280,13 +278,9 @@ namespace Draw
             ImNodes::PushAttributeFlag(ImNodesAttributeFlags_EnableLinkDetachWithDragClick);
             ImNodes::BeginNode(module.ID);
 
-            AddPins(module);
-
             ImGui::Text("MDU: %s", module.Name.c_str());
-            if (!module.Metadata.Author.empty())
-            {
-                ImGui::TextDisabled("by %s", module.Metadata.Author.c_str());
-            }
+
+            AddPins(module);
 
             ImNodes::EndNode();
             ImNodes::PopAttributeFlag();
@@ -302,8 +296,17 @@ namespace Draw
 
         if (openContextMenu && !ShowModuleDetails && SelectedModuleID == -1)
         {
+            // Ensure the rack under the mouse becomes the selected rack
+            if (std::find(SelectedRackIDs.begin(), SelectedRackIDs.end(), rack.ID) == SelectedRackIDs.end())
+            {
+                SelectedRackIDs.push_back(rack.ID);
+            }
+            SelectedModuleID = -1;
             ImGui::OpenPopup("RackContextMenu");
         }
+
+        // Render rack context menu modal if opened by right-click.
+        // RackContextMenu::Show();
 
         CreateLinks(rack);
 

@@ -17,6 +17,7 @@
 #include "Draw/Draw.h"
 #include "Draw/ImGuiUtil.h"
 #include "Audio/Record.h"
+#include "../include/Audio/UI/RackContextMenu.h"
 
 
 namespace Draw
@@ -325,6 +326,12 @@ namespace Draw
                 if (ImGui::MenuItem("Console"))
                 {
                     GlobalShowDebugConsole = true;
+                }
+
+                ImGui::Separator();
+                if (ImGui::MenuItem("Test"))   
+                {
+                    RackContextMenu::Show();
                 }
                 ImGui::EndMenu();
             }

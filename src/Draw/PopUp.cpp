@@ -175,61 +175,6 @@ namespace Draw
     // Handle rack context popup interactions and return whether rack deletion was requested.
     bool PopUpTool(Rack &rack)
     {
-        // Opens the rack menu for selected racks
-        bool requestDelete = false;
-        if (ImGui::BeginPopupModal("RackContextMenu"))
-        {
-            if (ImGui::InputText("Rack Name", &rack.Name, ImGuiInputTextFlags_EnterReturnsTrue))
-            {
-                ImGui::CloseCurrentPopup();
-            }
-
-            ImGui::Separator();
-
-            ImGui::Text("Rack Settings");
-            if (ImGui::BeginMenu("Voltage Range"))
-            {
-                const char *ranges[] = {"-5V to +5V", "-10V to +10V", "-12V to +12V", "-15V to +15V"};
-                for (int i = 0; i < 4; ++i)
-                {
-                    if (ImGui::MenuItem(ranges[i], nullptr, rack.VoltageRange == i))
-                    {
-                        rack.VoltageRange = i;
-                        Console::AppendConsoleLine("[info] Voltage range changed to: " + std::string(ranges[i]));
-                    }
-                }
-                ImGui::EndMenu();
-            }
-
-            ImGui::SameLine();
-
-            const char *rangeLabels[] = {"-5V to +5V", "-10V to +10V", "-12V to +12V", "-15V to +15V"};
-            ImGui::Text("Currently: %s", (rack.VoltageRange < 4) ? rangeLabels[rack.VoltageRange] : "Unknown");
-
-            ImGui::Separator();
-
-            ImGui::Text("Available Modules");
-            DrawAvailableModulesChild(rack);
-
-            ImGui::Separator();
-            if (ImGui::Selectable("Remove Rack"))
-            {
-                requestDelete = true;
-                ImGui::CloseCurrentPopup();
-            }
-
-            if (ImGui::IsKeyPressed(ImGuiKey_Escape))
-            {
-                ImGui::CloseCurrentPopup();
-            }
-            if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !ImGui::IsWindowHovered())
-            {
-                ImGui::CloseCurrentPopup();
-            }
-
-            ImGui::EndPopup();
-        }
-
         // For creating a rack by clicking an empty space
         if (ImGui::BeginPopupContextItem("RackCreatorContextMenu"))
         {
@@ -249,7 +194,5 @@ namespace Draw
 
             ImGui::EndPopup();
         }
-
-        return requestDelete;
     }
 }
