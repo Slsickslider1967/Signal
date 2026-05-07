@@ -128,7 +128,6 @@ add_executable(Signals
 	src/Audio/WaveForm.cpp
 	src/Functions/ConsoleHandling.cpp
 	src/Audio/Record.cpp
-	src/Audio/MIDIHandling.cpp
 )
 
 add_custom_target(copy_runtime_mdu_modules ALL
