@@ -49,4 +49,6 @@ imgui.ini
 image.png
 ToDo
 
-/tools
+tools/
+tests/
+tests_output/
