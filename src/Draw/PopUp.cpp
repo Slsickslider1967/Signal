@@ -175,9 +175,17 @@ namespace Draw
     // Handle rack context popup interactions and return whether rack deletion was requested.
     bool PopUpTool(Rack &rack)
     {
+        bool requestDelete = false;
+
         // For creating a rack by clicking an empty space
         if (ImGui::BeginPopupContextItem("RackCreatorContextMenu"))
         {
+            if (ImGui::Selectable("Remove Rack"))
+            {
+                requestDelete = true;
+                ImGui::CloseCurrentPopup();
+            }
+
             if (ImGui::Selectable("Create New Rack"))
             {
                 // CreateNewRack();
@@ -194,5 +202,8 @@ namespace Draw
 
             ImGui::EndPopup();
         }
+
+        (void)rack;
+        return requestDelete;
     }
 }

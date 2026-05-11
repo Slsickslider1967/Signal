@@ -37,6 +37,7 @@
 #include "MDU/FileWatcher.h"
 #include "Functions/ConsoleHandling.h"
 #include "HandlerShared.h"
+#include "Draw/UI/RackContextMenu.h"
 
 
 // -- Global State --
@@ -310,7 +311,7 @@ int main()
 
         // if (SelectedModuleID != -1 && ImGui::IsMouseClicked(ImGuiMouseButton_Right))
         // {
-        //     ShowModuleDetails = true;
+        //        RackContextMenu::Show();
         // }
 
         if (ShowModuleDetails)
@@ -443,11 +444,8 @@ void AudioFilterCallback(float *buffer, int numSamples, void *userData)
             }
 
             const auto &outBuffer = outIt->second;
-            // Debug: print sum of output buffer
-            float sum = 0.0f;
             for (int i = 0; i < numSamples && i < static_cast<int>(outBuffer.size()); ++i)
             {
-                sum += outBuffer[i];
                 float mixed = buffer[i] + outBuffer[i];
                 // Clamp to avoid hard clipping beyond normalized output range.
                 if (mixed > 1.0f)
@@ -455,11 +453,6 @@ void AudioFilterCallback(float *buffer, int numSamples, void *userData)
                 if (mixed < -1.0f)
                     mixed = -1.0f;
                 buffer[i] = mixed;
-            }
-            if (sum != 0.0f) {
-                Console::AppendConsoleLine("[debug] Output module " + std::to_string(module.ID) + " buffer sum: " + std::to_string(sum));
-            } else {
-                Console::AppendConsoleLine("[debug] Output module " + std::to_string(module.ID) + " buffer is silent");
             }
         }
     }
@@ -476,13 +469,14 @@ void ShutdownAudioHandling()
 // Create a new rack, assign an ID, and return it.
 Rack *CreateRack(const std::string &name)
 {
-    Rack newRack;
+    Racks.emplace_back();
+    Rack &newRack = Racks.back();
     newRack.ID = NextRackID++;
-    newRack.Name = name;
+    newRack.Name = name.empty() ? ("Rack " + std::to_string(newRack.ID)) : name;
     newRack.Enabled = true;
-    Racks.push_back(newRack);
+
     Console::AppendConsoleLine("Rack created: '" + newRack.Name + "' (ID #" + std::to_string(newRack.ID) + ")");
-    return &Racks.back();
+    return &newRack;
 }
 
 // Remove a rack and destroy all dynamic module instances inside it.

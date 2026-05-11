@@ -17,7 +17,7 @@
 #include "Draw/Draw.h"
 #include "Draw/ImGuiUtil.h"
 #include "Audio/Record.h"
-#include "../include/Audio/UI/RackContextMenu.h"
+#include "../include/Draw/UI/RackContextMenu.h"
 
 
 namespace Draw
@@ -346,6 +346,8 @@ namespace Draw
             }
             ImGui::EndMainMenuBar();
         }
+
+        RackContextMenu::Render();
 
         Debug();
     } 

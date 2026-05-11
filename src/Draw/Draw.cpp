@@ -17,7 +17,7 @@
 #include "Draw/Window.h"
 #include "Functions/ConsoleHandling.h"
 #include "MDU/CreateMDU.h"
-#include "../include/Audio/UI/RackContextMenu.h"
+#include "../include/Draw/UI/RackContextMenu.h"
 
 namespace Draw
 {
@@ -306,7 +306,10 @@ namespace Draw
         }
 
         // Render rack context menu modal if opened by right-click.
-        // RackContextMenu::Show();
+        if (ImGui::IsMouseClicked(ImGuiMouseButton_Right))
+        {
+        RackContextMenu::Show();
+        }
 
         CreateLinks(rack);
 

@@ -6,6 +6,7 @@ class RackContextMenu
 {
     public:
         static void Show();
+        static void Render();
         static void Close();
 
     private:
