@@ -128,9 +128,10 @@ add_executable(Signals
 	src/Draw/TopBar.cpp
 	src/Draw/PopUp.cpp
 
+	src/Draw/UI/TopMenu.cpp
 	src/Draw/UI/RackContextMenu.cpp
 
-	src/Audio/Audio.cpp
+	src/Audio/Audio.cpp	
 	src/Audio/CV.cpp
 	src/Audio/WaveForm.cpp	
 	src/Audio/Record.cpp

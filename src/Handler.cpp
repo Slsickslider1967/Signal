@@ -38,6 +38,7 @@
 #include "Functions/ConsoleHandling.h"
 #include "HandlerShared.h"
 #include "Draw/UI/RackContextMenu.h"
+#include "Draw/UI/TopMenu.h"
 
 
 // -- Global State --
@@ -241,7 +242,7 @@ int main()
 
         std::lock_guard<std::mutex> rackLock(GlobalRackMutex);
 
-        Draw::DrawTopBar();
+        TopMenu::Render();
 
         ImGuiViewport *mainViewport = ImGui::GetMainViewport();
         ImGui::SetNextWindowPos(mainViewport->WorkPos);

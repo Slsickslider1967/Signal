@@ -7,6 +7,7 @@
 
 static bool OpenContextMenu = false;
 static bool OpenContextMenuRequested = false;
+
 static const char *kRackContextMenuPopupName = "RackContextMenu";
 
 // Public
@@ -52,33 +53,35 @@ void RackContextMenu::CreateContextMenu()
             selectedRack = Draw::FindRackByID(SelectedRackIDs.back());
         }
 
-        if (!(selectedRack == nullptr))
+        if (selectedRack == nullptr)
         {
             ImGui::TextDisabled("Select a Rack First");
         }
-
-        if (ImGui::InputText("Rack Name", &selectedRack->Name, ImGuiInputTextFlags_EnterReturnsTrue))
+        else
         {
-            Close();
-        }
+            if (ImGui::InputText("Rack Name", &selectedRack->Name, ImGuiInputTextFlags_EnterReturnsTrue))
+            {
+                Close();
+            }
 
-        ImGui::Separator();
+            ImGui::Separator();
 
-        ImGui::Text("Rack Settings");
+            ImGui::Text("Rack Settings");
 
-        ImGui::SameLine();
-        RackContextMenu().VoltageRange(*selectedRack);
+            ImGui::SameLine();
+            RackContextMenu().VoltageRange(*selectedRack);
 
-        ImGui::Separator();
+            ImGui::Separator();
 
-        ImGui::Text("Available Modules");
-        Draw::DrawAvailableModulesChild(*selectedRack);
+            ImGui::Text("Available Modules");
+            Draw::DrawAvailableModulesChild(*selectedRack);
 
-        ImGui::Separator();
+            ImGui::Separator();
 
-        if (RemoveRack())
-        {
-            DeleteRack(selectedRack->ID);
+            if (RemoveRack())
+            {
+                DeleteRack(selectedRack->ID);
+            }
         }
 
         RackContextMenu().Input();
@@ -131,7 +134,7 @@ void RackContextMenu::Input()
     {
         ImGui::CloseCurrentPopup();
     }
-    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !ImGui::IsWindowHovered())
+    if (ImGui::IsMouseClicked(ImGuiMouseButton_Left) && !ImGui::IsWindowHovered(ImGuiHoveredFlags_AllowWhenBlockedByPopup | ImGuiHoveredFlags_ChildWindows) && !ImGui::IsAnyItemActive())
     {
         ImGui::CloseCurrentPopup();
     }

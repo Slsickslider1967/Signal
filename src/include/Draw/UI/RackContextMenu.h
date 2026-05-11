@@ -14,4 +14,5 @@ class RackContextMenu
         bool RemoveRack();
         void VoltageRange(Rack &rack);
         void Input();
+        void AvailableModules(Rack &rack);
 };
