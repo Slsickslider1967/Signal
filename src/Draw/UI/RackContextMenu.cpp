@@ -52,42 +52,39 @@ void RackContextMenu::CreateContextMenu()
             selectedRack = Draw::FindRackByID(SelectedRackIDs.back());
         }
 
-        if (selectedRack == nullptr)
+        if (!(selectedRack == nullptr))
         {
             ImGui::TextDisabled("Select a Rack First");
         }
-        else
+
+        if (ImGui::InputText("Rack Name", &selectedRack->Name, ImGuiInputTextFlags_EnterReturnsTrue))
         {
-            if (ImGui::InputText("Rack Name", &selectedRack->Name, ImGuiInputTextFlags_EnterReturnsTrue))
-            {
-                Close();
-            }
+            Close();
+        }
 
-            ImGui::Separator();
+        ImGui::Separator();
 
-            ImGui::Text("Rack Settings");
+        ImGui::Text("Rack Settings");
 
-            ImGui::SameLine();
-            RackContextMenu().VoltageRange(*selectedRack);
+        ImGui::SameLine();
+        RackContextMenu().VoltageRange(*selectedRack);
 
-            ImGui::Separator();
+        ImGui::Separator();
 
-            ImGui::Text("Available Modules");
-            Draw::DrawAvailableModulesChild(*selectedRack);
+        ImGui::Text("Available Modules");
+        Draw::DrawAvailableModulesChild(*selectedRack);
 
-            ImGui::Separator();
+        ImGui::Separator();
 
-            if (RemoveRack())
-            {
-                DeleteRack(selectedRack->ID);
-            }
+        if (RemoveRack())
+        {
+            DeleteRack(selectedRack->ID);
         }
 
         RackContextMenu().Input();
 
         ImGui::EndPopup();
     }
-
     if (!ImGui::IsPopupOpen(kRackContextMenuPopupName))
     {
         OpenContextMenu = false;
