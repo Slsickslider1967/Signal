@@ -125,7 +125,6 @@ add_executable(Signals
 	src/Draw/Draw.cpp
 	src/Draw/ImGuiUtil.cpp
 	src/Draw/Window.cpp
-	src/Draw/TopBar.cpp
 	src/Draw/PopUp.cpp
 
 	src/Draw/UI/TopMenu.cpp

@@ -302,13 +302,13 @@ namespace Draw
                 SelectedRackIDs.push_back(rack.ID);
             }
             SelectedModuleID = -1;
-            ImGui::OpenPopup("RackContextMenu");
+            
+            RackContextMenu::Show();
         }
 
         // Render rack context menu modal if opened by right-click.
         if (ImGui::IsMouseClicked(ImGuiMouseButton_Right))
         {
-        RackContextMenu::Show();
         }
 
         CreateLinks(rack);
